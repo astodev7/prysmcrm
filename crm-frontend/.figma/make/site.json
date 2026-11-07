@@ -1,0 +1,10 @@
+{
+  "description": "CRM para agências de sites gerenciarem leads, vendas, clientes, projetos e finanças em um só lugar, acompanhando desempenho e lucratividade.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
