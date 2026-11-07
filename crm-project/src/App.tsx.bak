@@ -1,0 +1,1544 @@
+import { FormEvent, useMemo, useState } from "react";
+import {
+  BarChart3,
+  Bell,
+  BriefcaseBusiness,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  CircleDollarSign,
+  Download,
+  FileBarChart,
+  Filter,
+  KanbanSquare,
+  LayoutDashboard,
+  ListTodo,
+  Menu,
+  MoreHorizontal,
+  Plus,
+  ReceiptText,
+  Search,
+  Settings,
+  Target,
+  Trash2,
+  TrendingUp,
+  UserRound,
+  UsersRound,
+  WalletCards,
+  X,
+} from "lucide-react";
+
+type Page =
+  | "Dashboard"
+  | "Leads"
+  | "Pipeline"
+  | "Clientes"
+  | "Projetos"
+  | "Tarefas"
+  | "Financeiro"
+  | "Despesas"
+  | "Relatórios"
+  | "Configurações";
+type Status =
+  | "Novo"
+  | "Primeiro contato"
+  | "Em conversa"
+  | "Interessado"
+  | "Proposta enviada"
+  | "Em negociação"
+  | "Ganho"
+  | "Perdido";
+type Lead = {
+  id: number;
+  company: string;
+  contact: string;
+  email: string;
+  segment: string;
+  source: string;
+  status: Status;
+  owner: string;
+  value: number;
+  probability: number;
+  next: string;
+  date: string;
+};
+type Client = { id: number; leadId: number; company: string; contact: string; value: number };
+type Project = {
+  id: number;
+  clientId: number;
+  name: string;
+  status: string;
+  value: number;
+  progress: number;
+  deadline: string;
+};
+type Task = {
+  id: number;
+  title: string;
+  relation: string;
+  status: string;
+  priority: string;
+  due: string;
+};
+type Money = {
+  id: number;
+  name: string;
+  value: number;
+  status: string;
+  kind: "receita" | "despesa";
+  relation: string;
+};
+
+const brl = (n: number) =>
+  new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  }).format(n);
+const stages: Status[] = [
+  "Novo",
+  "Primeiro contato",
+  "Em conversa",
+  "Interessado",
+  "Proposta enviada",
+  "Em negociação",
+  "Ganho",
+  "Perdido",
+];
+const seedLeads: Lead[] = [
+  {
+    id: 1,
+    company: "Ateliê Forma",
+    contact: "Marina Azevedo",
+    email: "marina@atelieforma.com",
+    segment: "Arquitetura",
+    source: "Instagram",
+    status: "Em negociação",
+    owner: "Rafael Lima",
+    value: 8500,
+    probability: 75,
+    next: "Revisar escopo",
+    date: "23 jun",
+  },
+  {
+    id: 2,
+    company: "Clínica Vitta",
+    contact: "Paulo Nunes",
+    email: "paulo@clinicavitta.com",
+    segment: "Saúde",
+    source: "Google Maps",
+    status: "Proposta enviada",
+    owner: "Rafael Lima",
+    value: 12800,
+    probability: 60,
+    next: "Follow-up da proposta",
+    date: "22 jun",
+  },
+  {
+    id: 3,
+    company: "Nexo Contábil",
+    contact: "Ana Clara",
+    email: "ana@nexocontabil.com",
+    segment: "Contabilidade",
+    source: "Indicação",
+    status: "Interessado",
+    owner: "Bianca Alves",
+    value: 4200,
+    probability: 45,
+    next: "Agendar apresentação",
+    date: "24 jun",
+  },
+  {
+    id: 4,
+    company: "Orbe Engenharia",
+    contact: "Lucas Tavares",
+    email: "lucas@orbe.com",
+    segment: "Engenharia",
+    source: "Pesquisa Google",
+    status: "Primeiro contato",
+    owner: "Bianca Alves",
+    value: 7900,
+    probability: 30,
+    next: "Enviar portfólio",
+    date: "21 jun",
+  },
+  {
+    id: 5,
+    company: "Sabor da Vila",
+    contact: "Helena Prado",
+    email: "helena@sabor.com",
+    segment: "Gastronomia",
+    source: "WhatsApp",
+    status: "Novo",
+    owner: "Rafael Lima",
+    value: 3600,
+    probability: 20,
+    next: "Primeiro contato",
+    date: "20 jun",
+  },
+  {
+    id: 6,
+    company: "Lumina Solar",
+    contact: "Igor Reis",
+    email: "igor@lumina.com",
+    segment: "Energia",
+    source: "Prospecção",
+    status: "Em conversa",
+    owner: "Bianca Alves",
+    value: 14500,
+    probability: 40,
+    next: "Mapear integrações",
+    date: "25 jun",
+  },
+  {
+    id: 7,
+    company: "Mello Advocacia",
+    contact: "Fernanda Mello",
+    email: "fernanda@mello.adv.br",
+    segment: "Jurídico",
+    source: "Indicação",
+    status: "Ganho",
+    owner: "Rafael Lima",
+    value: 9800,
+    probability: 100,
+    next: "Projeto criado",
+    date: "18 jun",
+  },
+];
+const seedClients: Client[] = [
+  { id: 1, leadId: 7, company: "Mello Advocacia", contact: "Fernanda Mello", value: 9800 },
+  { id: 2, leadId: 20, company: "Estúdio Norte", contact: "Caio Mendes", value: 15600 },
+  { id: 3, leadId: 21, company: "Aflora Escola", contact: "Lívia Costa", value: 11400 },
+];
+const seedProjects: Project[] = [
+  {
+    id: 1,
+    clientId: 1,
+    name: "Novo site Mello Advocacia",
+    status: "Em desenvolvimento",
+    value: 9800,
+    progress: 48,
+    deadline: "18 jul",
+  },
+  {
+    id: 2,
+    clientId: 2,
+    name: "Portal Estúdio Norte",
+    status: "Em revisão",
+    value: 15600,
+    progress: 82,
+    deadline: "28 jun",
+  },
+  {
+    id: 3,
+    clientId: 3,
+    name: "Site Aflora Escola",
+    status: "Aguardando conteúdo",
+    value: 11400,
+    progress: 35,
+    deadline: "05 jul",
+  },
+];
+const seedTasks: Task[] = [
+  {
+    id: 1,
+    title: "Revisar escopo da proposta",
+    relation: "Ateliê Forma",
+    status: "Em andamento",
+    priority: "Alta",
+    due: "Hoje, 14:30",
+  },
+  {
+    id: 2,
+    title: "Validar páginas institucionais",
+    relation: "Mello Advocacia",
+    status: "Pendente",
+    priority: "Média",
+    due: "Hoje, 17:00",
+  },
+  {
+    id: 3,
+    title: "Cobrar conteúdo da equipe",
+    relation: "Aflora Escola",
+    status: "Pendente",
+    priority: "Alta",
+    due: "Amanhã, 09:00",
+  },
+  {
+    id: 4,
+    title: "Follow-up proposta comercial",
+    relation: "Clínica Vitta",
+    status: "Atrasada",
+    priority: "Urgente",
+    due: "Atrasada há 1 dia",
+  },
+];
+const seedMoney: Money[] = [
+  {
+    id: 1,
+    name: "Mello Advocacia · Entrada",
+    value: 4900,
+    status: "Pago",
+    kind: "receita",
+    relation: "Mello Advocacia",
+  },
+  {
+    id: 2,
+    name: "Mello Advocacia · Entrega",
+    value: 4900,
+    status: "Pendente",
+    kind: "receita",
+    relation: "Mello Advocacia",
+  },
+  {
+    id: 3,
+    name: "Estúdio Norte · Parcela 2/2",
+    value: 7800,
+    status: "Pendente",
+    kind: "receita",
+    relation: "Estúdio Norte",
+  },
+  {
+    id: 4,
+    name: "Aflora Escola · Parcela 1/2",
+    value: 5700,
+    status: "Pago",
+    kind: "receita",
+    relation: "Aflora Escola",
+  },
+  {
+    id: 5,
+    name: "Licenças de design",
+    value: 620,
+    status: "Pago",
+    kind: "despesa",
+    relation: "Operacional",
+  },
+  {
+    id: 6,
+    name: "Freelancer copywriting",
+    value: 1800,
+    status: "Pago",
+    kind: "despesa",
+    relation: "Portal Estúdio Norte",
+  },
+  {
+    id: 7,
+    name: "Hospedagem anual",
+    value: 480,
+    status: "Pendente",
+    kind: "despesa",
+    relation: "Mello Advocacia",
+  },
+  {
+    id: 8,
+    name: "Campanha de aquisição",
+    value: 1250,
+    status: "Pago",
+    kind: "despesa",
+    relation: "Operacional",
+  },
+];
+const nav: [Page, typeof LayoutDashboard][] = [
+  ["Dashboard", LayoutDashboard],
+  ["Leads", Target],
+  ["Pipeline", KanbanSquare],
+  ["Clientes", UsersRound],
+  ["Projetos", BriefcaseBusiness],
+  ["Tarefas", ListTodo],
+  ["Financeiro", WalletCards],
+  ["Despesas", ReceiptText],
+  ["Relatórios", FileBarChart],
+  ["Configurações", Settings],
+];
+
+export default function App() {
+  const [page, setPage] = useState<Page>("Dashboard"),
+    [menu, setMenu] = useState(false),
+    [search, setSearch] = useState("");
+  const [leads, setLeads] = useState(seedLeads),
+    [clients, setClients] = useState(seedClients),
+    [projects, setProjects] = useState(seedProjects),
+    [tasks, setTasks] = useState(seedTasks),
+    [money, setMoney] = useState(seedMoney);
+  const [modal, setModal] = useState<"lead" | "task" | "expense" | null>(null),
+    [editing, setEditing] = useState<Lead | null>(null),
+    [remove, setRemove] = useState<Lead | null>(null),
+    [toast, setToast] = useState("");
+  const notify = (s: string) => {
+    setToast(s);
+    setTimeout(() => setToast(""), 2400);
+  };
+  const move = (id: number, status: Status) => {
+    const lead = leads.find((x) => x.id === id);
+    if (!lead) return;
+    setLeads((v) =>
+      v.map((x) =>
+        x.id === id ? { ...x, status, probability: status === "Ganho" ? 100 : x.probability } : x,
+      ),
+    );
+    if (status === "Ganho" && !clients.some((x) => x.leadId === id)) {
+      const cid = Date.now();
+      setClients((v) => [
+        ...v,
+        { id: cid, leadId: id, company: lead.company, contact: lead.contact, value: lead.value },
+      ]);
+      setProjects((v) => [
+        ...v,
+        {
+          id: Date.now() + 1,
+          clientId: cid,
+          name: `Site ${lead.company}`,
+          status: "Aguardando início",
+          value: lead.value,
+          progress: 0,
+          deadline: "A definir",
+        },
+      ]);
+      notify("Cliente e projeto criados sem duplicidade");
+    } else notify(`Movido para ${status}`);
+  };
+  const result = [
+    ...leads
+      .filter((x) => (x.company + x.contact).toLowerCase().includes(search.toLowerCase()))
+      .map((x) => [x.company, "Lead"] as const),
+    ...projects
+      .filter((x) => x.name.toLowerCase().includes(search.toLowerCase()))
+      .map((x) => [x.name, "Projeto"] as const),
+  ].slice(0, 5);
+  return (
+    <div className="shell">
+      {menu && <button className="shade" onClick={() => setMenu(false)} />}
+      <aside className={menu ? "open" : ""}>
+        <div className="brand">
+          <b>N</b>
+          <span>
+            <strong>NÓDULO</strong>
+            <small>gestão comercial</small>
+          </span>
+        </div>
+        <label>OPERAÇÃO</label>
+        <nav>
+          {nav.map(([n, I], i) => (
+            <button
+              key={n}
+              className={page === n ? "active" : ""}
+              onClick={() => {
+                setPage(n);
+                setMenu(false);
+              }}
+            >
+              <I size={17} />
+              {n}
+              {n === "Tarefas" && <em>4</em>}
+              {i === 5 && <i />}
+            </button>
+          ))}
+        </nav>
+        <div className="goal">
+          <span>
+            Meta mensal <b>68%</b>
+          </span>
+          <i>
+            <b />
+          </i>
+          <small>R$ 34.000 de R$ 50.000</small>
+        </div>
+      </aside>
+      <main>
+        <header>
+          <button className="icon mobile" onClick={() => setMenu(true)}>
+            <Menu size={18} />
+          </button>
+          <div className="search">
+            <Search size={16} />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar leads, clientes, projetos..."
+            />
+            {search.length > 1 && (
+              <div className="results">
+                {result.map(([a, b]) => (
+                  <button
+                    key={a}
+                    onClick={() => {
+                      setPage(b === "Lead" ? "Leads" : "Projetos");
+                      setSearch("");
+                    }}
+                  >
+                    <strong>{a}</strong>
+                    <small>{b}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <span className="demo">● Ambiente de demonstração</span>
+          <button className="icon">
+            <Bell size={17} />
+          </button>
+          <div className="user">
+            <b>RL</b>
+            <span>
+              Rafael Lima<small>Administrador</small>
+            </span>
+            <ChevronDown size={14} />
+          </div>
+        </header>
+        <section className="content">
+          {page === "Dashboard" && (
+            <Dashboard leads={leads} money={money} tasks={tasks} projects={projects} go={setPage} />
+          )}
+          {page === "Leads" && (
+            <Leads
+              leads={leads}
+              move={move}
+              edit={(x) => {
+                setEditing(x);
+                setModal("lead");
+              }}
+              add={() => {
+                setEditing(null);
+                setModal("lead");
+              }}
+              remove={setRemove}
+            />
+          )}
+          {page === "Pipeline" && (
+            <Pipeline leads={leads} move={move} add={() => setModal("lead")} />
+          )}
+          {page === "Clientes" && <Clients clients={clients} projects={projects} />}
+          {page === "Projetos" && <Projects projects={projects} clients={clients} />}
+          {page === "Tarefas" && (
+            <Tasks tasks={tasks} setTasks={setTasks} add={() => setModal("task")} />
+          )}
+          {page === "Financeiro" && <Finance money={money} clients={clients} />}
+          {page === "Despesas" && <Expenses money={money} add={() => setModal("expense")} />}
+          {page === "Relatórios" && <Reports leads={leads} money={money} />}
+          {page === "Configurações" && <SettingsPage />}
+        </section>
+      </main>
+      {modal === "lead" && (
+        <LeadForm
+          lead={editing}
+          close={() => setModal(null)}
+          save={(x) => {
+            setLeads((v) =>
+              v.some((y) => y.id === x.id) ? v.map((y) => (y.id === x.id ? x : y)) : [x, ...v],
+            );
+            setModal(null);
+            notify("Lead salvo com sucesso");
+          }}
+        />
+      )}
+      {modal === "task" && (
+        <QuickForm
+          type="task"
+          close={() => setModal(null)}
+          save={(name, value) => {
+            setTasks((v) => [
+              {
+                id: Date.now(),
+                title: name,
+                relation: value,
+                status: "Pendente",
+                priority: "Média",
+                due: "A definir",
+              },
+              ...v,
+            ]);
+            setModal(null);
+            notify("Tarefa criada");
+          }}
+        />
+      )}
+      {modal === "expense" && (
+        <QuickForm
+          type="expense"
+          close={() => setModal(null)}
+          save={(name, value) => {
+            setMoney((v) => [
+              {
+                id: Date.now(),
+                name,
+                value: Number(value),
+                status: "Pendente",
+                kind: "despesa",
+                relation: "Operacional",
+              },
+              ...v,
+            ]);
+            setModal(null);
+            notify("Despesa registrada");
+          }}
+        />
+      )}
+      {remove && (
+        <Modal
+          title="Excluir lead?"
+          sub={`Esta ação removerá ${remove.company} do CRM.`}
+          close={() => setRemove(null)}
+        >
+          <div className="confirm">
+            <Trash2 />
+            <p>Esta operação não poderá ser desfeita.</p>
+            <button onClick={() => setRemove(null)}>Cancelar</button>
+            <button
+              className="danger"
+              onClick={() => {
+                setLeads((v) => v.filter((x) => x.id !== remove.id));
+                setRemove(null);
+                notify("Lead excluído");
+              }}
+            >
+              Excluir definitivamente
+            </button>
+          </div>
+        </Modal>
+      )}
+      {toast && (
+        <div className="toast">
+          <Check size={14} />
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Head({
+  k = "VISÃO GERAL",
+  title,
+  sub,
+  children,
+}: {
+  k?: string;
+  title: string;
+  sub: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="head">
+      <div>
+        <label>{k}</label>
+        <h1>{title}</h1>
+        <p>{sub}</p>
+      </div>
+      <div>{children}</div>
+    </div>
+  );
+}
+function Btn({
+  children,
+  onClick,
+  plain = false,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  plain?: boolean;
+}) {
+  return (
+    <button className={`btn ${plain ? "plain" : ""}`} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+function Badge({ s }: { s: string }) {
+  return (
+    <span
+      className={`badge ${s
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replaceAll(" ", "-")}`}
+    >
+      <i />
+      {s}
+    </span>
+  );
+}
+function Metric({ name, value, Icon }: { name: string; value: string; Icon: typeof Target }) {
+  return (
+    <article className="metric">
+      <span>
+        {name}
+        <i>
+          <Icon size={16} />
+        </i>
+      </span>
+      <strong>{value}</strong>
+      <small>
+        ↗ 8,2% <em>vs. período anterior</em>
+      </small>
+    </article>
+  );
+}
+function PanelHead({ title, sub }: { title: string; sub: string }) {
+  return (
+    <div className="panelhead">
+      <div>
+        <h2>{title}</h2>
+        <p>{sub}</p>
+      </div>
+      <button>Ver detalhes ›</button>
+    </div>
+  );
+}
+
+function Dashboard({
+  leads,
+  money,
+  tasks,
+  projects,
+  go,
+}: {
+  leads: Lead[];
+  money: Money[];
+  tasks: Task[];
+  projects: Project[];
+  go: (p: Page) => void;
+}) {
+  const rec = money
+      .filter((x) => x.kind === "receita" && x.status === "Pago")
+      .reduce((s, x) => s + x.value, 0),
+    exp = money
+      .filter((x) => x.kind === "despesa" && x.status === "Pago")
+      .reduce((s, x) => s + x.value, 0),
+    pipe = leads
+      .filter((x) => !["Ganho", "Perdido"].includes(x.status))
+      .reduce((s, x) => s + x.value, 0);
+  return (
+    <>
+      <Head title="Bom dia, Rafael" sub="Aqui está o pulso da sua operação hoje.">
+        <Btn plain>
+          <CalendarDays size={15} /> Últimos 30 dias
+        </Btn>
+        <Btn plain>
+          <Download size={15} /> Exportar
+        </Btn>
+      </Head>
+      <div className="metrics">
+        <Metric name="Pipeline ativo" value={brl(pipe)} Icon={Target} />
+        <Metric name="Receita recebida" value={brl(rec)} Icon={CircleDollarSign} />
+        <Metric name="Lucro realizado" value={brl(rec - exp)} Icon={TrendingUp} />
+        <Metric
+          name="Taxa de conversão"
+          value={`${Math.round((leads.filter((x) => x.status === "Ganho").length / leads.length) * 100)}%`}
+          Icon={BarChart3}
+        />
+      </div>
+      <div className="dash">
+        <article className="panel chart">
+          <PanelHead title="Desempenho financeiro" sub="Receitas, despesas e lucro realizado" />
+          <div className="chartnums">
+            <span>
+              Receita <b>{brl(rec)}</b>
+            </span>
+            <span>
+              Despesas <b>{brl(exp)}</b>
+            </span>
+            <span>
+              Lucro <b>{brl(rec - exp)}</b>
+            </span>
+          </div>
+          <svg viewBox="0 0 700 180" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+                <stop stopColor="#a8ff3e" stopOpacity=".25" />
+                <stop offset="1" stopColor="#a8ff3e" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M0 150 L65 130 L130 140 L195 96 L260 108 L325 72 L390 82 L455 46 L520 62 L585 28 L650 40 L700 18 L700 180 L0 180Z"
+              fill="url(#g)"
+            />
+            <path
+              d="M0 150 L65 130 L130 140 L195 96 L260 108 L325 72 L390 82 L455 46 L520 62 L585 28 L650 40 L700 18"
+              fill="none"
+              stroke="#a8ff3e"
+              strokeWidth="2"
+            />
+          </svg>
+        </article>
+        <article className="panel funnel">
+          <PanelHead title="Funil de vendas" sub={`${leads.length} oportunidades no período`} />
+          {["Novo", "Interessado", "Proposta enviada", "Em negociação", "Ganho"].map((s, i) => {
+            const n = leads.filter((x) => i === 0 || x.status === s).length;
+            return (
+              <div key={s}>
+                <span>
+                  {s}
+                  <b>{n}</b>
+                </span>
+                <i>
+                  <b style={{ width: `${100 - i * 18}%` }} />
+                </i>
+              </div>
+            );
+          })}
+        </article>
+      </div>
+      <div className="twocol">
+        <article className="panel">
+          <PanelHead title="Próximas ações" sub="Itens que precisam da sua atenção" />
+          <div className="rows">
+            {tasks.map((x) => (
+              <div key={x.id}>
+                <Clock />
+                <span>
+                  <strong>{x.title}</strong>
+                  <small>{x.relation}</small>
+                </span>
+                <em>{x.due}</em>
+              </div>
+            ))}
+          </div>
+        </article>
+        <article className="panel">
+          <PanelHead title="Projetos em andamento" sub={`${projects.length} projetos ativos`} />
+          <div className="projects">
+            {projects.map((x) => (
+              <div key={x.id}>
+                <span>
+                  <b>{x.name[0]}</b>
+                  <strong>
+                    {x.name}
+                    <small>{x.status}</small>
+                  </strong>
+                  <em>{x.progress}%</em>
+                </span>
+                <i>
+                  <b style={{ width: `${x.progress}%` }} />
+                </i>
+              </div>
+            ))}
+          </div>
+        </article>
+      </div>
+      <p className="note">
+        ● Indicadores calculados a partir dos registros deste ambiente de demonstração.
+      </p>
+    </>
+  );
+}
+function Clock() {
+  return <span className="clock">◷</span>;
+}
+
+function Leads({
+  leads,
+  move,
+  edit,
+  add,
+  remove,
+}: {
+  leads: Lead[];
+  move: (a: number, b: Status) => void;
+  edit: (l: Lead) => void;
+  add: () => void;
+  remove: (l: Lead) => void;
+}) {
+  const [q, setQ] = useState(""),
+    [status, setStatus] = useState("Todos"),
+    filtered = leads.filter(
+      (x) =>
+        (x.company + x.contact).toLowerCase().includes(q.toLowerCase()) &&
+        (status === "Todos" || x.status === status),
+    );
+  const csv = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(
+      new Blob([
+        [
+          "Empresa,Contato,Status,Valor",
+          ...filtered.map((x) => `${x.company},${x.contact},${x.status},${x.value}`),
+        ].join("\n"),
+      ]),
+    );
+    a.download = "leads.csv";
+    a.click();
+  };
+  return (
+    <>
+      <Head k="COMERCIAL" title="Leads" sub={`${leads.length} oportunidades registradas na base.`}>
+        <Btn plain onClick={csv}>
+          <Download size={15} /> Exportar
+        </Btn>
+        <Btn onClick={add}>
+          <Plus size={16} /> Novo lead
+        </Btn>
+      </Head>
+      <div className="strip">
+        <span>
+          Total de leads<b>{leads.length}</b>
+        </span>
+        <span>
+          Em negociação<b>{leads.filter((x) => x.status === "Em negociação").length}</b>
+        </span>
+        <span>
+          Valor em aberto
+          <b>{brl(leads.filter((x) => x.status !== "Ganho").reduce((s, x) => s + x.value, 0))}</b>
+        </span>
+      </div>
+      <article className="panel table">
+        <div className="tools">
+          <div>
+            <Search size={15} />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar empresa ou contato"
+            />
+          </div>
+          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option>Todos</option>
+            {stages.map((x) => (
+              <option key={x}>{x}</option>
+            ))}
+          </select>
+          <button>
+            <Filter size={14} /> Mais filtros
+          </button>
+        </div>
+        <Table leads={filtered} edit={edit} remove={remove} />
+      </article>
+    </>
+  );
+}
+function Table({
+  leads,
+  edit,
+  remove,
+}: {
+  leads: Lead[];
+  edit: (l: Lead) => void;
+  remove: (l: Lead) => void;
+}) {
+  return (
+    <div className="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>EMPRESA / CONTATO</th>
+            <th>STATUS</th>
+            <th>ORIGEM</th>
+            <th>RESPONSÁVEL</th>
+            <th>PRÓXIMA AÇÃO</th>
+            <th>VALOR</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {leads.map((x) => (
+            <tr key={x.id}>
+              <td>
+                <div className="entity">
+                  <b>{x.company[0]}</b>
+                  <span>
+                    <strong>{x.company}</strong>
+                    <small>
+                      {x.contact} · {x.segment}
+                    </small>
+                  </span>
+                </div>
+              </td>
+              <td>
+                <Badge s={x.status} />
+              </td>
+              <td>{x.source}</td>
+              <td>{x.owner}</td>
+              <td>
+                <strong>{x.next}</strong>
+                <small>{x.date}</small>
+              </td>
+              <td>
+                <strong>{brl(x.value)}</strong>
+                <small>{x.probability}% prob.</small>
+              </td>
+              <td>
+                <button onClick={() => edit(x)}>Editar</button>
+                <button onClick={() => remove(x)}>
+                  <Trash2 size={14} />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Pipeline({
+  leads,
+  move,
+  add,
+}: {
+  leads: Lead[];
+  move: (a: number, b: Status) => void;
+  add: () => void;
+}) {
+  return (
+    <>
+      <Head
+        k="COMERCIAL"
+        title="Pipeline de vendas"
+        sub="Arraste oportunidades entre etapas para atualizar o funil."
+      >
+        <Btn onClick={add}>
+          <Plus size={16} /> Nova oportunidade
+        </Btn>
+      </Head>
+      <div className="strip">
+        <span>
+          Pipeline total
+          <b>
+            {brl(
+              leads
+                .filter((x) => !["Ganho", "Perdido"].includes(x.status))
+                .reduce((s, x) => s + x.value, 0),
+            )}
+          </b>
+        </span>
+        <span>
+          Oportunidades ativas
+          <b>{leads.filter((x) => !["Ganho", "Perdido"].includes(x.status)).length}</b>
+        </span>
+        <span>
+          Conversão
+          <b>
+            {Math.round((leads.filter((x) => x.status === "Ganho").length / leads.length) * 100)}%
+          </b>
+        </span>
+      </div>
+      <div className="kanban">
+        {stages.map((s) => (
+          <section
+            key={s}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => move(Number(e.dataTransfer.getData("id")), s)}
+          >
+            <header>
+              <strong>
+                {s}
+                <em>{leads.filter((x) => x.status === s).length}</em>
+              </strong>
+              <span>
+                {brl(leads.filter((x) => x.status === s).reduce((a, x) => a + x.value, 0))}
+              </span>
+            </header>
+            {leads
+              .filter((x) => x.status === s)
+              .map((x) => (
+                <article
+                  draggable
+                  onDragStart={(e) => e.dataTransfer.setData("id", String(x.id))}
+                  key={x.id}
+                >
+                  <div>
+                    <b>{x.company[0]}</b>
+                    <span>
+                      <strong>{x.company}</strong>
+                      <small>{x.contact}</small>
+                    </span>
+                    <MoreHorizontal size={15} />
+                  </div>
+                  <p>{x.segment}</p>
+                  <h3>{brl(x.value)}</h3>
+                  <footer>
+                    ◷ {x.date}
+                    <em>{x.probability}%</em>
+                  </footer>
+                </article>
+              ))}
+          </section>
+        ))}
+      </div>
+      <p className="note">
+        ● Mover para “Ganho” cria cliente e projeto vinculados, preservando o histórico.
+      </p>
+    </>
+  );
+}
+
+function Clients({ clients, projects }: { clients: Client[]; projects: Project[] }) {
+  return (
+    <>
+      <Head
+        k="RELACIONAMENTO"
+        title="Clientes"
+        sub="Contratos, projetos e saúde financeira em uma visão."
+      >
+        <Btn>
+          <Plus size={16} /> Novo cliente
+        </Btn>
+      </Head>
+      <div className="cards">
+        {clients.map((x) => (
+          <article key={x.id}>
+            <b className="letter">{x.company[0]}</b>
+            <h2>{x.company}</h2>
+            <p>{x.contact}</p>
+            <div>
+              <span>
+                Contratado<b>{brl(x.value)}</b>
+              </span>
+              <span>
+                Projetos<b>{projects.filter((p) => p.clientId === x.id).length}</b>
+              </span>
+            </div>
+            <button>Ver perfil completo →</button>
+          </article>
+        ))}
+      </div>
+    </>
+  );
+}
+function Projects({ projects, clients }: { projects: Project[]; clients: Client[] }) {
+  return (
+    <>
+      <Head k="OPERAÇÃO" title="Projetos" sub="Acompanhe prazos, etapas e rentabilidade.">
+        <Btn>
+          <Plus size={16} /> Novo projeto
+        </Btn>
+      </Head>
+      <article className="panel list">
+        {projects.map((x) => (
+          <div key={x.id}>
+            <b className="letter">{x.name[0]}</b>
+            <span>
+              <strong>{x.name}</strong>
+              <small>{clients.find((c) => c.id === x.clientId)?.company}</small>
+            </span>
+            <Badge s={x.status} />
+            <span className="grow">
+              Progresso <b>{x.progress}%</b>
+              <i>
+                <b style={{ width: `${x.progress}%` }} />
+              </i>
+            </span>
+            <strong>
+              {brl(x.value)}
+              <small>Prazo {x.deadline}</small>
+            </strong>
+          </div>
+        ))}
+      </article>
+    </>
+  );
+}
+function Tasks({
+  tasks,
+  setTasks,
+  add,
+}: {
+  tasks: Task[];
+  setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
+  add: () => void;
+}) {
+  return (
+    <>
+      <Head k="ACOMPANHAMENTO" title="Tarefas" sub="Prioridades comerciais e operacionais.">
+        <Btn onClick={add}>
+          <Plus size={16} /> Nova tarefa
+        </Btn>
+      </Head>
+      <div className="taskboard">
+        {["Atrasada", "Pendente", "Em andamento", "Concluída"].map((s) => (
+          <section key={s}>
+            <header>
+              {s}
+              <em>{tasks.filter((x) => x.status === s).length}</em>
+            </header>
+            {tasks
+              .filter((x) => x.status === s)
+              .map((x) => (
+                <article key={x.id}>
+                  <button
+                    onClick={() =>
+                      setTasks((v) =>
+                        v.map((t) =>
+                          t.id === x.id
+                            ? { ...t, status: t.status === "Concluída" ? "Pendente" : "Concluída" }
+                            : t,
+                        ),
+                      )
+                    }
+                  >
+                    {x.status === "Concluída" && <Check size={12} />}
+                  </button>
+                  <span>
+                    <strong>{x.title}</strong>
+                    <small>{x.relation}</small>
+                    <footer>
+                      <em>{x.priority}</em>
+                      {x.due}
+                    </footer>
+                  </span>
+                </article>
+              ))}
+          </section>
+        ))}
+      </div>
+    </>
+  );
+}
+function Finance({ money, clients }: { money: Money[]; clients: Client[] }) {
+  const rec = money.filter((x) => x.kind === "receita"),
+    exp = money.filter((x) => x.kind === "despesa"),
+    paid = rec.filter((x) => x.status === "Pago").reduce((s, x) => s + x.value, 0),
+    cost = exp.filter((x) => x.status === "Pago").reduce((s, x) => s + x.value, 0);
+  return (
+    <>
+      <Head
+        k="FINANCEIRO"
+        title="Visão financeira"
+        sub="Contrato, faturamento e caixa tratados separadamente."
+      >
+        <Btn>
+          <Plus size={16} /> Nova receita
+        </Btn>
+      </Head>
+      <div className="metrics four">
+        <Metric
+          name="Total vendido"
+          value={brl(clients.reduce((s, x) => s + x.value, 0))}
+          Icon={BriefcaseBusiness}
+        />
+        <Metric name="Efetivamente recebido" value={brl(paid)} Icon={CircleDollarSign} />
+        <Metric name="Despesas pagas" value={brl(cost)} Icon={WalletCards} />
+        <Metric name="Lucro realizado" value={brl(paid - cost)} Icon={TrendingUp} />
+      </div>
+      <MoneyTable data={rec} />
+      <p className="note">
+        ● Lucro realizado considera apenas receitas recebidas menos despesas pagas.
+      </p>
+    </>
+  );
+}
+function Expenses({ money, add }: { money: Money[]; add: () => void }) {
+  const data = money.filter((x) => x.kind === "despesa");
+  return (
+    <>
+      <Head k="FINANCEIRO" title="Despesas" sub="Custos operacionais e de projetos.">
+        <Btn onClick={add}>
+          <Plus size={16} /> Nova despesa
+        </Btn>
+      </Head>
+      <div className="strip">
+        <span>
+          Total<b>{brl(data.reduce((s, x) => s + x.value, 0))}</b>
+        </span>
+        <span>
+          Pago<b>{brl(data.filter((x) => x.status === "Pago").reduce((s, x) => s + x.value, 0))}</b>
+        </span>
+        <span>
+          Pendente
+          <b>{brl(data.filter((x) => x.status !== "Pago").reduce((s, x) => s + x.value, 0))}</b>
+        </span>
+      </div>
+      <MoneyTable data={data} />
+    </>
+  );
+}
+function MoneyTable({ data }: { data: Money[] }) {
+  return (
+    <article className="panel table">
+      <div className="panelhead">
+        <div>
+          <h2>Registros financeiros</h2>
+          <p>Valores vinculados à operação</p>
+        </div>
+      </div>
+      <div className="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>DESCRIÇÃO</th>
+              <th>VÍNCULO</th>
+              <th>STATUS</th>
+              <th>VALOR</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((x) => (
+              <tr key={x.id}>
+                <td>
+                  <strong>{x.name}</strong>
+                </td>
+                <td>{x.relation}</td>
+                <td>
+                  <Badge s={x.status} />
+                </td>
+                <td>
+                  <strong>{brl(x.value)}</strong>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  );
+}
+function Reports({ leads, money }: { leads: Lead[]; money: Money[] }) {
+  const sources = Object.entries(
+    leads.reduce<Record<string, number>>(
+      (a, x) => ({ ...a, [x.source]: (a[x.source] || 0) + 1 }),
+      {},
+    ),
+  );
+  return (
+    <>
+      <Head k="ANÁLISE" title="Relatórios" sub="Decisões baseadas nos registros do CRM.">
+        <Btn plain>
+          <Download size={15} /> Exportar relatório
+        </Btn>
+      </Head>
+      <div className="report">
+        <article className="panel">
+          <PanelHead title="Origem dos leads" sub="Distribuição por aquisição" />
+          {sources.map(([s, n]) => (
+            <div className="bar" key={s}>
+              <span>{s}</span>
+              <i>
+                <b style={{ width: `${(n / leads.length) * 100}%` }} />
+              </i>
+              <strong>{n}</strong>
+            </div>
+          ))}
+        </article>
+        <article className="panel">
+          <PanelHead title="Resumo comercial" sub="Eficiência do funil" />
+          <div className="reportnums">
+            <span>
+              Leads cadastrados<b>{leads.length}</b>
+            </span>
+            <span>
+              Convertidos<b>{leads.filter((x) => x.status === "Ganho").length}</b>
+            </span>
+            <span>
+              Ticket médio<b>{brl(9800)}</b>
+            </span>
+            <span>
+              Resultado realizado
+              <b>
+                {brl(
+                  money
+                    .filter((x) => x.status === "Pago")
+                    .reduce((s, x) => s + (x.kind === "receita" ? x.value : -x.value), 0),
+                )}
+              </b>
+            </span>
+          </div>
+        </article>
+      </div>
+    </>
+  );
+}
+function SettingsPage() {
+  return (
+    <>
+      <Head k="ADMINISTRAÇÃO" title="Configurações" sub="Personalize o CRM e o acesso da equipe." />
+      <div className="settings">
+        <nav>
+          {[
+            ["Dados da empresa", UserRound],
+            ["Usuários e permissões", UsersRound],
+            ["Status do pipeline", KanbanSquare],
+            ["Categorias financeiras", WalletCards],
+            ["Pacotes de serviços", BriefcaseBusiness],
+            ["Notificações", Bell],
+          ].map(([s, I], i) => (
+            <button className={i === 0 ? "active" : ""} key={s as string}>
+              {<I size={16} />} {s as string}
+            </button>
+          ))}
+        </nav>
+        <article className="panel form">
+          <h2>Dados da empresa</h2>
+          <p>Informações usadas em propostas e relatórios.</p>
+          <label>
+            Nome da empresa
+            <input defaultValue="Nódulo Studio Digital" />
+          </label>
+          <div>
+            <label>
+              CNPJ
+              <input placeholder="00.000.000/0001-00" />
+            </label>
+            <label>
+              E-mail
+              <input defaultValue="contato@nodulo.studio" />
+            </label>
+          </div>
+          <label>
+            Endereço
+            <input defaultValue="São Paulo, SP" />
+          </label>
+          <Btn>Salvar alterações</Btn>
+          <aside>
+            <strong>Banco de dados ainda não conectado</strong>
+            <small>
+              Estado temporário preparado para receber autenticação, RBAC e persistência.
+            </small>
+          </aside>
+        </article>
+      </div>
+    </>
+  );
+}
+
+function Modal({
+  title,
+  sub,
+  close,
+  children,
+}: {
+  title: string;
+  sub: string;
+  close: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="backdrop">
+      <section className="modal">
+        <header>
+          <span>
+            <h2>{title}</h2>
+            <p>{sub}</p>
+          </span>
+          <button onClick={close}>
+            <X size={18} />
+          </button>
+        </header>
+        {children}
+      </section>
+    </div>
+  );
+}
+function LeadForm({
+  lead,
+  close,
+  save,
+}: {
+  lead: Lead | null;
+  close: () => void;
+  save: (l: Lead) => void;
+}) {
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const d = new FormData(e.currentTarget);
+    save({
+      id: lead?.id || Date.now(),
+      company: String(d.get("company")),
+      contact: String(d.get("contact")),
+      email: String(d.get("email")),
+      segment: String(d.get("segment")),
+      source: String(d.get("source")),
+      status: String(d.get("status")) as Status,
+      owner: String(d.get("owner")),
+      value: Number(d.get("value")),
+      probability: Number(d.get("probability")),
+      next: String(d.get("next")),
+      date: String(d.get("date")),
+    });
+  };
+  return (
+    <Modal
+      title={lead ? "Editar lead" : "Novo lead"}
+      sub="Dados comerciais conectados ao pipeline."
+      close={close}
+    >
+      <form onSubmit={submit} className="modalform">
+        {[
+          ["company", "Empresa", lead?.company],
+          ["contact", "Responsável", lead?.contact],
+          ["email", "E-mail", lead?.email],
+          ["segment", "Segmento", lead?.segment],
+          ["value", "Valor estimado", lead?.value],
+          ["probability", "Probabilidade (%)", lead?.probability],
+          ["next", "Próxima ação", lead?.next],
+          ["date", "Próximo contato", lead?.date],
+        ].map(([n, l, v]) => (
+          <label key={String(n)}>
+            {l}
+            <input name={String(n)} required defaultValue={v} />
+          </label>
+        ))}
+        <label>
+          Origem
+          <select name="source" defaultValue={lead?.source}>
+            {["Google Maps", "Instagram", "Indicação", "WhatsApp", "Prospecção", "Outros"].map(
+              (x) => (
+                <option key={x}>{x}</option>
+              ),
+            )}
+          </select>
+        </label>
+        <label>
+          Status
+          <select name="status" defaultValue={lead?.status}>
+            {stages.map((x) => (
+              <option key={x}>{x}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Responsável
+          <select name="owner" defaultValue={lead?.owner}>
+            <option>Rafael Lima</option>
+            <option>Bianca Alves</option>
+          </select>
+        </label>
+        <footer>
+          <Btn plain onClick={close}>
+            Cancelar
+          </Btn>
+          <Btn>Salvar lead</Btn>
+        </footer>
+      </form>
+    </Modal>
+  );
+}
+function QuickForm({
+  type,
+  close,
+  save,
+}: {
+  type: "task" | "expense";
+  close: () => void;
+  save: (a: string, b: string) => void;
+}) {
+  const [a, setA] = useState(""),
+    [b, setB] = useState("");
+  return (
+    <Modal
+      title={type === "task" ? "Nova tarefa" : "Nova despesa"}
+      sub="O registro ficará integrado à operação."
+      close={close}
+    >
+      <div className="quick">
+        <label>
+          {type === "task" ? "Título" : "Descrição"}
+          <input value={a} onChange={(e) => setA(e.target.value)} />
+        </label>
+        <label>
+          {type === "task" ? "Vínculo" : "Valor"}
+          <input
+            type={type === "expense" ? "number" : "text"}
+            value={b}
+            onChange={(e) => setB(e.target.value)}
+          />
+        </label>
+        <footer>
+          <Btn plain onClick={close}>
+            Cancelar
+          </Btn>
+          <Btn onClick={() => a && b && save(a, b)}>Salvar</Btn>
+        </footer>
+      </div>
+    </Modal>
+  );
+}
