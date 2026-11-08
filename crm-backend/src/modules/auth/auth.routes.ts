@@ -6,16 +6,18 @@ import { env } from "../../config/env.js";
 import { AppError } from "../../utils/errors.js";
 
 const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(1),
 });
 
-const registerSchema = z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-  password: z.string().min(6),
-  role: z.enum(["ADMIN", "COMERCIAL", "FINANCEIRO", "OPERACIONAL"]).optional(),
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8, "A nova senha precisa ter pelo menos 8 caracteres"),
 });
+
+// Mesma mensagem para "usuário não existe", "inativo" e "senha errada"
+// (não revela quais e-mails estão cadastrados).
+const INVALID_LOGIN = "E-mail ou senha inválidos";
 
 export async function authRoutes(app: FastifyInstance) {
   // POST /auth/login
@@ -24,12 +26,12 @@ export async function authRoutes(app: FastifyInstance) {
 
     const user = await prisma.user.findUnique({ where: { email: body.email } });
     if (!user || !user.active) {
-      throw new AppError("E-mail ou senha inválidos", 401);
+      throw new AppError(INVALID_LOGIN, 401);
     }
 
     const valid = await bcrypt.compare(body.password, user.password);
     if (!valid) {
-      throw new AppError("E-mail ou senha inválidos", 401);
+      throw new AppError(INVALID_LOGIN, 401);
     }
 
     const token = app.jwt.sign({ sub: user.id, role: user.role });
@@ -45,45 +47,10 @@ export async function authRoutes(app: FastifyInstance) {
     });
   });
 
-  // POST /auth/register (somente ADMIN ou primeiro usuário)
-  app.post("/register", async (request, reply) => {
-    const body = registerSchema.parse(request.body);
-
-    const exists = await prisma.user.findUnique({ where: { email: body.email } });
-    if (exists) {
-      throw new AppError("E-mail já cadastrado", 409);
-    }
-
-    const usersCount = await prisma.user.count();
-    const role = usersCount === 0 ? "ADMIN" : body.role ?? "COMERCIAL";
-
-    // Se já existe usuário e não é o primeiro, exige auth de ADMIN
-    if (usersCount > 0) {
-      try {
-        await request.jwtVerify();
-        if (request.user.role !== "ADMIN") {
-          throw new AppError("Apenas administradores podem criar usuários", 403);
-        }
-      } catch (err) {
-        if (err instanceof AppError) throw err;
-        throw new AppError("Não autorizado", 401);
-      }
-    }
-
-    const hash = await bcrypt.hash(body.password, env.BCRYPT_SALT_ROUNDS);
-
-    const user = await prisma.user.create({
-      data: {
-        name: body.name,
-        email: body.email,
-        password: hash,
-        role,
-      },
-      select: { id: true, name: true, email: true, role: true, createdAt: true },
-    });
-
-    return reply.status(201).send(user);
-  });
+  // NOTA: a antiga rota POST /auth/register foi removida de propósito.
+  // Ela deixava qualquer pessoa criar o primeiro ADMIN quando o banco estava vazio.
+  // Agora: o primeiro admin nasce pelo seed (ADMIN_EMAIL/ADMIN_PASSWORD) ou por
+  // `npm run user:create`, e os demais são criados por um ADMIN em POST /users.
 
   // GET /auth/me
   app.get(
@@ -100,6 +67,26 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       return user;
+    },
+  );
+
+  // PUT /auth/password — o próprio usuário troca a senha
+  app.put(
+    "/password",
+    { onRequest: [app.authenticate] },
+    async (request, reply) => {
+      const body = changePasswordSchema.parse(request.body);
+
+      const user = await prisma.user.findUnique({ where: { id: request.user.sub } });
+      if (!user) throw new AppError("Usuário não encontrado", 404);
+
+      const ok = await bcrypt.compare(body.currentPassword, user.password);
+      if (!ok) throw new AppError("Senha atual incorreta", 400);
+
+      const hash = await bcrypt.hash(body.newPassword, env.BCRYPT_SALT_ROUNDS);
+      await prisma.user.update({ where: { id: user.id }, data: { password: hash } });
+
+      return reply.status(204).send();
     },
   );
 }

@@ -266,8 +266,18 @@ export const api = {
   updateCompany: (data: Record<string, unknown>) =>
     request<ApiCompany>("/company", { method: "PUT", body: data }),
 
-  // Users
+  // Users (somente ADMIN)
   getUsers: () => request<ApiUser[]>("/users"),
+  createUser: (data: { name: string; email: string; password: string; role: string }) =>
+    request<ApiUser>("/users", { method: "POST", body: data }),
+  updateUser: (
+    id: string,
+    data: { name?: string; email?: string; password?: string; role?: string; active?: boolean },
+  ) => request<ApiUser>(`/users/${id}`, { method: "PUT", body: data }),
+
+  // Senha do próprio usuário
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>("/auth/password", { method: "PUT", body: { currentPassword, newPassword } }),
 };
 
 export { ApiError };

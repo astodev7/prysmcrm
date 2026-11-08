@@ -42,7 +42,7 @@ export async function buildApp() {
   await app.register(companyRoutes, { prefix: "/company" });
 
   // Error handler global
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error: Error, _request, reply) => {
     if (error instanceof ZodError) {
       return reply.status(400).send({
         message: "Dados inválidos",
@@ -54,9 +54,13 @@ export async function buildApp() {
       return reply.status(error.statusCode).send({ message: error.message });
     }
 
-    // Fastify validation / JWT errors
-    if (error.validation) {
-      return reply.status(400).send({ message: "Dados inválidos", errors: error.validation });
+    // Fastify validation errors
+    const fastifyError = error as Error & { validation?: unknown };
+    if (fastifyError.validation) {
+      return reply.status(400).send({
+        message: "Dados inválidos",
+        errors: fastifyError.validation,
+      });
     }
 
     app.log.error(error);

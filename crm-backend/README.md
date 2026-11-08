@@ -29,8 +29,10 @@ cp .env.example .env
 # 3. Criar o banco e rodar migrations
 npx prisma migrate dev --name init
 
-# 4. Popular com dados de exemplo
+# 4. Criar o primeiro administrador real
+#    (preencha ADMIN_NAME, ADMIN_EMAIL e ADMIN_PASSWORD no .env e rode:)
 npm run prisma:seed
+#    depois apague ADMIN_PASSWORD do .env
 
 # 5. Subir o servidor
 npm run dev
@@ -48,13 +50,26 @@ API disponível em: `http://localhost:3333`
 | `PORT` | Não | Porta do servidor (padrão `3333`) |
 | `FRONTEND_URL` | Não | URL do frontend para CORS |
 | `BCRYPT_SALT_ROUNDS` | Não | Rounds do bcrypt (padrão `12`) |
+| `ADMIN_NAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Só no seed | Criam o 1º administrador (`npm run prisma:seed`) |
 
-## Usuários de seed
+## Usuários
 
-| Email | Senha | Role |
-|-------|-------|------|
-| `rafael@nodulo.studio` | `123456` | ADMIN |
-| `bianca@nodulo.studio` | `123456` | COMERCIAL |
+Não existem usuários nem senhas padrão. O acesso é criado assim:
+
+1. **Primeiro admin**: `npm run prisma:seed` (lê `ADMIN_NAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` do `.env`; não apaga nada e não duplica).
+2. **Demais pessoas**: no sistema, em *Configurações → Usuários e permissões* (somente ADMIN), ou pelo terminal:
+   ```bash
+   npm run user:create -- --name "Maria Souza" --email maria@empresa.com --role COMERCIAL
+   # a senha é pedida no terminal (digitação oculta); use --reset para redefinir a senha de quem já existe
+   ```
+3. **Contas de demonstração antigas** (`rafael@` / `bianca@nodulo.studio`, senha `123456`), se existirem no seu banco:
+   crie seus admins reais e rode `npm run user:purge-demo` — ele desativa só as que ainda usam a senha padrão.
+
+Dados de exemplo (leads, clientes etc.) existem só para desenvolvimento: `npm run prisma:seed:demo -- --force`
+(**apaga todo o banco**; recusa rodar com `NODE_ENV=production`).
+
+Regras: senha com no mínimo 8 caracteres; e-mail é salvo em minúsculas; sempre deve existir ao menos 1 admin ativo;
+desativar um usuário bloqueia o acesso dele imediatamente.
 
 ## Endpoints
 
@@ -62,10 +77,10 @@ API disponível em: `http://localhost:3333`
 | Método | Rota | Auth | Descrição |
 |--------|------|------|-----------|
 | POST | `/auth/login` | — | Login |
-| POST | `/auth/register` | ADMIN* | Registrar usuário |
 | GET | `/auth/me` | ✅ | Dados do usuário logado |
+| PUT | `/auth/password` | ✅ | O próprio usuário troca a senha |
 
-\* O primeiro usuário pode ser criado sem auth (vira ADMIN automaticamente).
+> A rota pública `/auth/register` foi removida (permitia criar o 1º ADMIN sem login).
 
 ### Users (ADMIN)
 | Método | Rota | Descrição |
@@ -148,5 +163,5 @@ Roles disponíveis: `ADMIN`, `COMERCIAL`, `FINANCEIRO`, `OPERACIONAL`.
 ```bash
 curl -X POST http://localhost:3333/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"rafael@nodulo.studio","password":"123456"}'
+  -d '{"email":"seu@email.com","password":"sua-senha"}'
 ```

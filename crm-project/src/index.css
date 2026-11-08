@@ -14,12 +14,15 @@
   --yellow: #e7bb5a;
 }
 @layer base {
+  html {
+    font-size: 120%;
+  }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
     font:
-      13px Manrope,
+      0.8125rem Manrope,
       sans-serif;
   }
   button,
@@ -39,30 +42,30 @@
 .shell > aside {
   position: fixed;
   inset: 0 auto 0 0;
-  width: 232px;
+  width: 14.5rem;
   background: var(--side);
   border-right: 1px solid #1d201a;
-  padding: 24px 14px 18px;
+  padding: 1.5rem 0.875rem 1.125rem;
   z-index: 30;
   display: flex;
   flex-direction: column;
 }
 .brand {
   display: flex;
-  gap: 10px;
+  gap: 0.625rem;
   align-items: center;
-  padding: 0 9px 30px;
+  padding: 0 0.5625rem 1.875rem;
 }
 .brand > b,
 .letter {
   display: grid;
   place-items: center;
-  width: 31px;
-  height: 31px;
-  border-radius: 8px 2px;
+  width: 1.9375rem;
+  height: 1.9375rem;
+  border-radius: 0.5rem 2px;
   background: var(--lime);
   color: #10130c;
-  font-size: 17px;
+  font-size: 1.0625rem;
 }
 .brand span strong,
 .brand span small {
@@ -70,31 +73,31 @@
 }
 .brand span strong {
   letter-spacing: 0.14em;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .brand span small {
-  font-size: 9px;
+  font-size: 0.625rem;
   color: var(--dim);
 }
 aside > label,
 .head label {
-  font-size: 9px;
+  font-size: 0.625rem;
   letter-spacing: 0.14em;
   color: var(--dim);
   font-weight: 700;
-  padding: 0 10px 8px;
+  padding: 0 0.625rem 0.5rem;
 }
 .shell aside nav {
   flex: 1;
 }
 .shell aside nav button {
   width: 100%;
-  height: 39px;
+  height: 2.4375rem;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 11px;
-  border-radius: 7px;
+  gap: 0.625rem;
+  padding: 0 0.6875rem;
+  border-radius: 0.4375rem;
   color: var(--muted);
   position: relative;
 }
@@ -109,32 +112,32 @@ aside > label,
 .shell aside nav button.active:before {
   content: "";
   position: absolute;
-  left: -14px;
+  left: -0.875rem;
   width: 2px;
-  height: 21px;
+  height: 1.3125rem;
   background: var(--lime);
 }
 .shell aside nav button em {
   margin-left: auto;
   font-style: normal;
   background: #272a24;
-  padding: 2px 6px;
-  border-radius: 9px;
-  font-size: 9px;
+  padding: 2px 0.375rem;
+  border-radius: 0.5625rem;
+  font-size: 0.625rem;
 }
 .shell aside nav button i {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: -13px;
+  bottom: -0.8125rem;
   border-top: 1px solid var(--line);
 }
 .goal {
-  padding: 13px;
+  padding: 0.8125rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 0.5rem;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 0.625rem;
 }
 .goal span {
   display: flex;
@@ -148,10 +151,10 @@ aside > label,
 .projects > div > i,
 .bar i {
   display: block;
-  height: 3px;
+  height: 0.1875rem;
   background: #272a24;
-  margin: 9px 0;
-  border-radius: 3px;
+  margin: 0.5625rem 0;
+  border-radius: 0.1875rem;
   overflow: hidden;
 }
 .goal > i b {
@@ -161,27 +164,27 @@ aside > label,
   background: var(--lime);
 }
 .shell > main {
-  margin-left: 232px;
+  margin-left: 14.5rem;
 }
 main > header {
-  height: 66px;
+  height: 4.125rem;
   position: sticky;
   top: 0;
   z-index: 20;
   background: #0a0b09e8;
-  backdrop-filter: blur(15px);
+  backdrop-filter: blur(0.9375rem);
   border-bottom: 1px solid #1d201a;
-  padding: 0 30px;
+  padding: 0 1.875rem;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 0.875rem;
 }
 .search {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   position: relative;
-  width: min(380px, 40vw);
+  width: min(23.75rem, 40vw);
   color: var(--dim);
   margin-right: auto;
 }
@@ -193,21 +196,21 @@ main > header {
 }
 .results {
   position: absolute;
-  top: 32px;
+  top: 2rem;
   width: 100%;
-  padding: 8px;
+  padding: 0.5rem;
   background: #171915;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 20px 50px #000;
+  border-radius: 0.5rem;
+  box-shadow: 0 1.25rem 3.125rem #000;
   z-index: 10;
 }
 .results button {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 8px;
-  border-radius: 5px;
+  padding: 0.5rem;
+  border-radius: 0.3125rem;
 }
 .results button:hover {
   background: #22251f;
@@ -218,68 +221,68 @@ main > header {
 }
 .results small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 0.625rem;
 }
-.demo {
+.status {
   border: 1px solid var(--line);
-  border-radius: 15px;
-  padding: 5px 9px;
-  font-size: 9px;
+  border-radius: 0.9375rem;
+  padding: 0.3125rem 0.5625rem;
+  font-size: 0.625rem;
   color: var(--muted);
 }
-.demo::first-letter {
+.status::first-letter {
   color: var(--yellow);
 }
 .icon {
-  width: 33px;
-  height: 33px;
+  width: 2.0625rem;
+  height: 2.0625rem;
   display: grid;
   place-items: center;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: 0.4375rem;
   color: var(--muted);
 }
 .user {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 10px;
+  gap: 0.5rem;
+  font-size: 0.625rem;
 }
 .user > b {
-  width: 30px;
-  height: 30px;
+  width: 1.875rem;
+  height: 1.875rem;
   display: grid;
   place-items: center;
   background: #293025;
   color: var(--lime);
-  border-radius: 7px;
+  border-radius: 0.4375rem;
 }
 .user span small {
   display: block;
   color: var(--dim);
-  font-size: 8px;
+  font-size: 0.625rem;
 }
 .mobile {
   display: none;
 }
 .content {
-  padding: 31px 30px 45px;
-  max-width: 1540px;
+  padding: 1.9375rem 1.875rem 2.8125rem;
+  max-width: 96.25rem;
   margin: auto;
 }
 .head {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 27px;
+  margin-bottom: 1.6875rem;
 }
 .head label {
   display: block;
   color: var(--lime);
-  padding: 0 0 8px;
+  padding: 0 0 0.5rem;
 }
 .head h1 {
-  font-size: 27px;
+  font-size: 1.6875rem;
   letter-spacing: -0.04em;
   font-weight: 600;
   line-height: 1.1;
@@ -287,23 +290,23 @@ main > header {
 .head p,
 .panelhead p {
   color: var(--muted);
-  font-size: 10px;
-  margin-top: 7px;
+  font-size: 0.625rem;
+  margin-top: 0.4375rem;
 }
 .head > div:last-child {
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
 }
 .btn {
-  height: 35px;
-  padding: 0 13px;
-  border-radius: 7px;
+  height: 2.1875rem;
+  padding: 0 0.8125rem;
+  border-radius: 0.4375rem;
   background: var(--lime);
   color: #10130c;
   font-weight: 700;
-  font-size: 10px;
+  font-size: 0.625rem;
   display: inline-flex;
-  gap: 7px;
+  gap: 0.4375rem;
   align-items: center;
   justify-content: center;
 }
@@ -315,109 +318,109 @@ main > header {
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 0.625rem;
+  margin-bottom: 0.625rem;
 }
 .metric,
 .panel,
 .cards article {
   background: var(--card);
   border: 1px solid #1e211b;
-  border-radius: 9px;
+  border-radius: 0.5625rem;
 }
 .metric {
-  padding: 16px;
+  padding: 1rem;
 }
 .metric > span {
   display: flex;
   align-items: center;
   justify-content: space-between;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 .metric > span i {
-  width: 28px;
-  height: 28px;
+  width: 1.75rem;
+  height: 1.75rem;
   display: grid;
   place-items: center;
   background: #1c1f1a;
-  border-radius: 6px;
+  border-radius: 0.375rem;
 }
 .metric > strong {
   display: block;
-  font-size: 21px;
-  margin: 8px 0 6px;
+  font-size: 1.3125rem;
+  margin: 0.5rem 0 0.375rem;
 }
 .metric small {
   color: var(--lime);
-  font: 9px DM Mono;
+  font: 0.625rem DM Mono;
 }
 .metric small em {
   color: var(--dim);
-  font: 8px Manrope;
+  font: 0.625rem Manrope;
   font-style: normal;
 }
 .dash {
   display: grid;
   grid-template-columns: 1.7fr 0.8fr;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 0.625rem;
+  margin-bottom: 0.625rem;
 }
 .panelhead {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 18px;
+  padding: 1.125rem;
 }
 .panelhead h2 {
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 .panelhead p {
-  font-size: 9px;
-  margin-top: 4px;
+  font-size: 0.625rem;
+  margin-top: 0.25rem;
 }
 .panelhead button {
-  font-size: 9px;
+  font-size: 0.625rem;
   color: var(--muted);
 }
 .chartnums {
   display: flex;
-  gap: 35px;
-  padding: 0 18px;
+  gap: 2.1875rem;
+  padding: 0 1.125rem;
 }
 .chartnums span {
   color: var(--dim);
-  font-size: 8px;
+  font-size: 0.625rem;
 }
 .chartnums b {
   display: block;
   color: white;
-  font: 11px DM Mono;
-  margin-top: 3px;
+  font: 0.6875rem DM Mono;
+  margin-top: 0.1875rem;
 }
 .chart svg {
   width: 100%;
-  height: 210px;
-  padding: 18px;
+  height: 13.125rem;
+  padding: 1.125rem;
 }
 .funnel {
-  padding-bottom: 10px;
+  padding-bottom: 0.625rem;
 }
 .funnel > div:not(.panelhead) {
-  padding: 0 18px;
-  margin: 8px 0 16px;
+  padding: 0 1.125rem;
+  margin: 0.5rem 0 1rem;
 }
 .funnel span {
   display: flex;
   justify-content: space-between;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 0.625rem;
 }
 .funnel > div > i {
   display: block;
-  height: 7px;
+  height: 0.4375rem;
   background: #22251f;
-  margin-top: 7px;
+  margin-top: 0.4375rem;
 }
 .funnel > div > i b {
   display: block;
@@ -427,30 +430,30 @@ main > header {
 .twocol {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
-  gap: 10px;
+  gap: 0.625rem;
 }
 .rows,
 .projects {
-  padding: 0 18px 10px;
+  padding: 0 1.125rem 0.625rem;
 }
 .rows > div {
   display: grid;
-  grid-template-columns: 28px 1fr auto;
+  grid-template-columns: 1.75rem 1fr auto;
   align-items: center;
-  gap: 9px;
+  gap: 0.5625rem;
   border-top: 1px solid var(--line);
-  min-height: 49px;
+  min-height: 3.0625rem;
 }
 .rows > div:first-child {
   border: 0;
 }
 .clock {
-  width: 25px;
-  height: 25px;
+  width: 1.5625rem;
+  height: 1.5625rem;
   display: grid;
   place-items: center;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   color: var(--muted);
 }
 .rows strong,
@@ -461,21 +464,21 @@ main > header {
 }
 .rows strong,
 .projects strong {
-  font-size: 9px;
+  font-size: 0.625rem;
 }
 .rows small,
 .projects small {
-  font-size: 8px;
+  font-size: 0.625rem;
   color: var(--dim);
-  margin-top: 3px;
+  margin-top: 0.1875rem;
 }
 .rows em {
-  font-size: 8px;
+  font-size: 0.625rem;
   color: var(--muted);
   font-style: normal;
 }
 .projects > div {
-  padding: 10px 0;
+  padding: 0.625rem 0;
   border-top: 1px solid var(--line);
 }
 .projects > div:first-child {
@@ -484,23 +487,23 @@ main > header {
 .projects > div > span {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
 }
 .projects > div > span > b {
-  width: 26px;
-  height: 26px;
+  width: 1.625rem;
+  height: 1.625rem;
   display: grid;
   place-items: center;
   background: #282d24;
-  border-radius: 6px;
+  border-radius: 0.375rem;
 }
 .projects em {
   margin-left: auto;
-  font: 9px DM Mono;
+  font: 0.625rem DM Mono;
   color: var(--muted);
 }
 .projects > div > i {
-  margin-left: 34px;
+  margin-left: 2.125rem;
 }
 .projects i b,
 .grow i b,
@@ -510,9 +513,9 @@ main > header {
   background: var(--lime);
 }
 .note {
-  font-size: 9px;
+  font-size: 0.625rem;
   color: var(--dim);
-  margin-top: 12px;
+  margin-top: 0.75rem;
 }
 .note::first-letter {
   color: var(--yellow);
@@ -522,13 +525,13 @@ main > header {
   grid-template-columns: repeat(3, 1fr);
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 9px;
-  margin-bottom: 10px;
+  border-radius: 0.5625rem;
+  margin-bottom: 0.625rem;
 }
 .strip span {
-  padding: 14px 18px;
+  padding: 0.875rem 1.125rem;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 0.625rem;
   border-right: 1px solid var(--line);
 }
 .strip span:last-child {
@@ -537,14 +540,14 @@ main > header {
 .strip b {
   display: block;
   color: white;
-  font-size: 15px;
-  margin-top: 5px;
+  font-size: 0.9375rem;
+  margin-top: 0.3125rem;
 }
 .tools {
-  height: 58px;
-  padding: 11px 14px;
+  height: 3.625rem;
+  padding: 0.6875rem 0.875rem;
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
   border-bottom: 1px solid var(--line);
 }
 .tools > div,
@@ -552,16 +555,16 @@ main > header {
 .tools select {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 0 10px;
+  border-radius: 0.4375rem;
+  padding: 0 0.625rem;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 0.625rem;
   background: var(--card);
 }
 .tools > div {
-  width: 280px;
+  width: 17.5rem;
 }
 .tools input {
   background: none;
@@ -575,21 +578,21 @@ main > header {
 .table table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 900px;
+  min-width: 56.25rem;
 }
 th {
   text-align: left;
   color: var(--dim);
-  font-size: 8px;
+  font-size: 0.625rem;
   letter-spacing: 0.07em;
-  padding: 11px 14px;
+  padding: 0.6875rem 0.875rem;
   background: #0f110e;
 }
 td {
-  padding: 12px 14px;
+  padding: 0.75rem 0.875rem;
   border-top: 1px solid var(--line);
   color: #adb2a8;
-  font-size: 9px;
+  font-size: 0.625rem;
 }
 td > strong,
 td > small {
@@ -597,21 +600,21 @@ td > small {
 }
 td > small {
   color: var(--dim);
-  font-size: 8px;
-  margin-top: 3px;
+  font-size: 0.625rem;
+  margin-top: 0.1875rem;
 }
 .entity {
   display: flex;
-  gap: 9px;
+  gap: 0.5625rem;
   align-items: center;
 }
 .entity > b {
-  width: 29px;
-  height: 29px;
+  width: 1.8125rem;
+  height: 1.8125rem;
   display: grid;
   place-items: center;
   background: #282c25;
-  border-radius: 6px;
+  border-radius: 0.375rem;
 }
 .entity strong,
 .entity small {
@@ -621,23 +624,23 @@ td > small {
   color: white;
 }
 .entity small {
-  font-size: 8px;
+  font-size: 0.625rem;
   color: var(--dim);
-  margin-top: 3px;
+  margin-top: 0.1875rem;
 }
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 7px;
+  gap: 0.3125rem;
+  padding: 0.25rem 0.4375rem;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  font-size: 8px;
+  border-radius: 0.75rem;
+  font-size: 0.625rem;
   white-space: nowrap;
 }
 .badge i {
-  width: 5px;
-  height: 5px;
+  width: 0.3125rem;
+  height: 0.3125rem;
   background: #747a70;
   border-radius: 50%;
 }
@@ -666,87 +669,87 @@ td:last-child {
   white-space: nowrap;
 }
 td:last-child button {
-  font-size: 8px;
+  font-size: 0.625rem;
   color: var(--muted);
-  margin-right: 8px;
+  margin-right: 0.5rem;
 }
 .kanban {
   display: flex;
-  gap: 9px;
+  gap: 0.5625rem;
   overflow: auto;
-  min-height: 520px;
+  min-height: 32.5rem;
 }
 .kanban > section {
-  min-width: 245px;
+  min-width: 15.3125rem;
   background: #0e100d;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
 }
 .kanban section > header {
   display: flex;
   justify-content: space-between;
-  padding: 5px 3px 11px;
-  font-size: 9px;
+  padding: 0.3125rem 0.1875rem 0.6875rem;
+  font-size: 0.625rem;
 }
 .kanban header em {
   font-style: normal;
   background: #252821;
-  padding: 1px 6px;
-  border-radius: 8px;
-  margin-left: 6px;
+  padding: 1px 0.375rem;
+  border-radius: 0.5rem;
+  margin-left: 0.375rem;
 }
 .kanban header span {
   color: var(--muted);
-  font: 8px DM Mono;
+  font: 0.625rem DM Mono;
 }
 .kanban article {
   background: var(--card2);
   border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 11px;
-  margin-bottom: 7px;
+  border-radius: 0.4375rem;
+  padding: 0.6875rem;
+  margin-bottom: 0.4375rem;
   cursor: grab;
 }
 .kanban article > div {
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
   align-items: center;
 }
 .kanban article > div > b {
-  width: 26px;
-  height: 26px;
+  width: 1.625rem;
+  height: 1.625rem;
   display: grid;
   place-items: center;
   background: #282d24;
-  border-radius: 6px;
+  border-radius: 0.375rem;
 }
 .kanban article span strong,
 .kanban article span small {
   display: block;
 }
 .kanban article span small {
-  font-size: 7px;
+  font-size: 0.625rem;
   color: var(--dim);
 }
 .kanban article svg {
   margin-left: auto;
 }
 .kanban article p {
-  font-size: 8px;
+  font-size: 0.625rem;
   color: var(--muted);
-  margin: 10px 0 4px;
+  margin: 0.625rem 0 0.25rem;
 }
 .kanban article h3 {
-  font: 11px DM Mono;
+  font: 0.6875rem DM Mono;
 }
 .kanban article footer {
   display: flex;
   justify-content: space-between;
   border-top: 1px solid var(--line);
-  padding-top: 8px;
-  margin-top: 10px;
-  font-size: 8px;
+  padding-top: 0.5rem;
+  margin-top: 0.625rem;
+  font-size: 0.625rem;
   color: var(--dim);
 }
 .kanban footer em {
@@ -756,70 +759,70 @@ td:last-child button {
 .cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 0.625rem;
 }
 .cards article {
-  padding: 17px;
+  padding: 1.0625rem;
 }
 .letter {
-  width: 37px;
-  height: 37px;
-  border-radius: 8px;
-  font-size: 15px;
+  width: 2.3125rem;
+  height: 2.3125rem;
+  border-radius: 0.5rem;
+  font-size: 0.9375rem;
 }
 .cards h2 {
-  font-size: 13px;
-  margin-top: 13px;
+  font-size: 0.8125rem;
+  margin-top: 0.8125rem;
 }
 .cards p {
-  font-size: 9px;
+  font-size: 0.625rem;
   color: var(--muted);
-  margin-top: 4px;
+  margin-top: 0.25rem;
 }
 .cards article > div {
   display: grid;
   grid-template-columns: 1fr 1fr;
   border-block: 1px solid var(--line);
-  padding: 14px 0;
-  margin: 16px 0;
+  padding: 0.875rem 0;
+  margin: 1rem 0;
 }
 .cards span {
-  font-size: 8px;
+  font-size: 0.625rem;
   color: var(--dim);
 }
 .cards span b {
   display: block;
   color: white;
-  font: 11px DM Mono;
-  margin-top: 4px;
+  font: 0.6875rem DM Mono;
+  margin-top: 0.25rem;
 }
 .cards article > button {
-  font-size: 8px;
+  font-size: 0.625rem;
   color: var(--muted);
 }
 .list > div {
   display: grid;
-  grid-template-columns: 36px 1.4fr 150px 1fr 100px;
+  grid-template-columns: 2.25rem 1.4fr 9.375rem 1fr 6.25rem;
   align-items: center;
-  gap: 15px;
-  padding: 14px;
+  gap: 0.9375rem;
+  padding: 0.875rem;
   border-bottom: 1px solid var(--line);
 }
 .list .letter {
-  width: 34px;
-  height: 34px;
+  width: 2.125rem;
+  height: 2.125rem;
 }
 .list strong,
 .list small {
   display: block;
 }
 .list small {
-  font-size: 8px;
+  font-size: 0.625rem;
   color: var(--dim);
-  margin-top: 3px;
+  margin-top: 0.1875rem;
 }
 .grow {
-  font-size: 8px;
+  font-size: 0.625rem;
   color: var(--muted);
 }
 .grow > b {
@@ -829,41 +832,41 @@ td:last-child button {
 .taskboard {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 9px;
+  gap: 0.5625rem;
 }
 .taskboard > section {
-  min-height: 490px;
+  min-height: 30.625rem;
   background: #0e100d;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
 }
 .taskboard section > header {
-  padding: 6px 4px 13px;
-  font-size: 9px;
+  padding: 0.375rem 0.25rem 0.8125rem;
+  font-size: 0.625rem;
   font-weight: 600;
 }
 .taskboard header em {
   float: right;
   font-style: normal;
   background: #242720;
-  padding: 1px 6px;
-  border-radius: 8px;
+  padding: 1px 0.375rem;
+  border-radius: 0.5rem;
 }
 .taskboard article {
   display: flex;
-  gap: 9px;
+  gap: 0.5625rem;
   background: var(--card2);
   border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 11px;
-  margin-bottom: 7px;
+  border-radius: 0.4375rem;
+  padding: 0.6875rem;
+  margin-bottom: 0.4375rem;
 }
 .taskboard article > button {
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
   border: 1px solid #464b42;
-  border-radius: 4px;
+  border-radius: 0.25rem;
 }
 .taskboard article > span {
   flex: 1;
@@ -873,19 +876,19 @@ td:last-child button {
   display: block;
 }
 .taskboard strong {
-  font-size: 9px;
+  font-size: 0.625rem;
 }
 .taskboard small {
-  font-size: 8px;
+  font-size: 0.625rem;
   color: var(--dim);
-  margin-top: 4px;
+  margin-top: 0.25rem;
 }
 .taskboard footer {
   display: flex;
   justify-content: space-between;
   color: var(--dim);
-  font-size: 7px;
-  margin-top: 12px;
+  font-size: 0.625rem;
+  margin-top: 0.75rem;
 }
 .taskboard footer em {
   font-style: normal;
@@ -894,16 +897,16 @@ td:last-child button {
 .report {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 0.625rem;
 }
 .bar {
   display: grid;
-  grid-template-columns: 140px 1fr 20px;
+  grid-template-columns: 8.75rem 1fr 1.25rem;
   align-items: center;
-  gap: 10px;
-  padding: 8px 18px;
+  gap: 0.625rem;
+  padding: 0.5rem 1.125rem;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 0.625rem;
 }
 .bar i {
   margin: 0;
@@ -913,64 +916,64 @@ td:last-child button {
   grid-template-columns: 1fr 1fr;
   gap: 1px;
   background: var(--line);
-  margin: 10px 18px;
+  margin: 0.625rem 1.125rem;
 }
 .reportnums span {
   background: var(--card);
-  padding: 18px;
+  padding: 1.125rem;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 0.625rem;
 }
 .reportnums b {
   display: block;
   color: white;
-  font-size: 16px;
-  margin-top: 6px;
+  font-size: 1rem;
+  margin-top: 0.375rem;
 }
 .settings {
   display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 10px;
+  grid-template-columns: 13.75rem 1fr;
+  gap: 0.625rem;
 }
 .settings > nav {
-  padding: 7px;
+  padding: 0.4375rem;
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 0.5625rem;
 }
 .settings > nav button {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   width: 100%;
-  height: 39px;
-  padding: 0 8px;
+  height: 2.4375rem;
+  padding: 0 0.5rem;
   color: var(--muted);
-  font-size: 9px;
-  border-radius: 6px;
+  font-size: 0.625rem;
+  border-radius: 0.375rem;
 }
 .settings > nav button.active {
   background: #1d201a;
   color: white;
 }
 .form {
-  padding: 20px;
+  padding: 1.25rem;
 }
 .form > h2 {
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 .form > p {
-  font-size: 9px;
+  font-size: 0.625rem;
   color: var(--muted);
-  margin: 5px 0 20px;
+  margin: 0.3125rem 0 1.25rem;
 }
 .form label,
 .modalform label,
 .quick label {
   display: block;
   color: #adb2a8;
-  font-size: 9px;
-  margin-bottom: 13px;
+  font-size: 0.625rem;
+  margin-bottom: 0.8125rem;
 }
 .form input,
 .modalform input,
@@ -978,25 +981,25 @@ td:last-child button {
 .quick input {
   display: block;
   width: 100%;
-  height: 38px;
+  height: 2.375rem;
   background: #0d0f0c;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 0.375rem;
   color: white;
-  padding: 0 10px;
-  margin-top: 6px;
+  padding: 0 0.625rem;
+  margin-top: 0.375rem;
 }
 .form > div {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 0.75rem;
 }
 .form aside {
-  margin-top: 20px;
-  padding: 12px;
+  margin-top: 1.25rem;
+  padding: 0.75rem;
   border: 1px solid #e7bb5a33;
   background: #e7bb5a0a;
-  border-radius: 7px;
+  border-radius: 0.4375rem;
 }
 .form aside strong,
 .form aside small {
@@ -1004,8 +1007,8 @@ td:last-child button {
 }
 .form aside small {
   color: var(--muted);
-  font-size: 8px;
-  margin-top: 4px;
+  font-size: 0.625rem;
+  margin-top: 0.25rem;
 }
 .backdrop {
   position: fixed;
@@ -1014,53 +1017,53 @@ td:last-child button {
   background: #000b;
   display: grid;
   place-items: center;
-  padding: 20px;
-  backdrop-filter: blur(4px);
+  padding: 1.25rem;
+  backdrop-filter: blur(0.25rem);
 }
 .modal {
-  width: min(650px, 100%);
-  max-height: calc(100vh - 40px);
+  width: min(40.625rem, 100%);
+  max-height: calc(100vh - 2.5rem);
   overflow: auto;
   background: #121410;
   border: 1px solid #30342c;
-  border-radius: 10px;
-  box-shadow: 0 30px 100px #000;
+  border-radius: 0.625rem;
+  box-shadow: 0 1.875rem 6.25rem #000;
 }
 .modal > header {
   display: flex;
   justify-content: space-between;
-  padding: 18px 20px;
+  padding: 1.125rem 1.25rem;
   border-bottom: 1px solid var(--line);
 }
 .modal header h2 {
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 .modal header p {
   color: var(--muted);
-  font-size: 9px;
-  margin-top: 4px;
+  font-size: 0.625rem;
+  margin-top: 0.25rem;
 }
 .modalform {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0 14px;
-  padding: 20px;
+  gap: 0 0.875rem;
+  padding: 1.25rem;
 }
 .modalform footer,
 .quick footer {
   grid-column: 1/-1;
   border-top: 1px solid var(--line);
-  padding-top: 15px;
+  padding-top: 0.9375rem;
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 0.5rem;
 }
 .quick,
 .confirm {
-  padding: 22px;
+  padding: 1.375rem;
 }
 .quick footer {
-  margin-top: 15px;
+  margin-top: 0.9375rem;
 }
 .confirm {
   text-align: center;
@@ -1071,30 +1074,30 @@ td:last-child button {
 }
 .confirm p {
   color: var(--muted);
-  margin: 12px;
+  margin: 0.75rem;
 }
 .confirm button {
-  padding: 8px 12px;
+  padding: 0.5rem 0.75rem;
   color: var(--muted);
 }
 .confirm .danger {
   background: #a33b36;
   color: white;
-  border-radius: 6px;
+  border-radius: 0.375rem;
 }
 .toast {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
+  right: 1.5rem;
+  bottom: 1.5rem;
   z-index: 120;
   background: #1a1d17;
   border: 1px solid #384032;
-  padding: 11px 14px;
-  border-radius: 8px;
+  padding: 0.6875rem 0.875rem;
+  border-radius: 0.5rem;
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
   align-items: center;
-  font-size: 10px;
+  font-size: 0.625rem;
 }
 .toast svg {
   color: var(--lime);
@@ -1102,7 +1105,7 @@ td:last-child button {
 .shade {
   display: none;
 }
-@media (max-width: 1000px) {
+@media (max-width: 1100px) {
   .shell > aside {
     transform: translateX(-100%);
     transition: 0.25s;
@@ -1138,9 +1141,9 @@ td:last-child button {
 }
 @media (max-width: 650px) {
   main > header {
-    padding: 0 13px;
+    padding: 0 0.8125rem;
   }
-  .demo,
+  .status,
   .user span,
   .user svg {
     display: none;
@@ -1149,13 +1152,13 @@ td:last-child button {
     width: 100%;
   }
   .content {
-    padding: 24px 13px;
+    padding: 1.5rem 0.8125rem;
   }
   .head {
     display: block;
   }
   .head > div:last-child {
-    margin-top: 15px;
+    margin-top: 0.9375rem;
   }
   .metrics,
   .twocol,
@@ -1170,7 +1173,7 @@ td:last-child button {
     display: none;
   }
   .list > div {
-    grid-template-columns: 36px 1fr 90px;
+    grid-template-columns: 2.25rem 1fr 5.625rem;
   }
   .list .badge,
   .list .grow {
@@ -1199,9 +1202,9 @@ td:last-child button {
   background: var(--bg, #0b0d0a);
 }
 .login-card {
-  width: min(400px, 92vw);
+  width: min(25rem, 92vw);
   padding: 2rem;
-  border-radius: 16px;
+  border-radius: 1rem;
   background: var(--panel, #141814);
   border: 1px solid rgba(255, 255, 255, 0.08);
   display: grid;
@@ -1226,14 +1229,14 @@ td:last-child button {
 }
 .login-card input {
   padding: 0.65rem 0.75rem;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(0, 0, 0, 0.25);
   color: inherit;
 }
 .login-error {
   padding: 0.6rem 0.75rem;
-  border-radius: 8px;
+  border-radius: 0.5rem;
   background: rgba(255, 80, 80, 0.15);
   color: #ff8a8a;
   font-size: 0.85rem;
@@ -1245,4 +1248,66 @@ td:last-child button {
 }
 .login-card .btn {
   margin-top: 0.25rem;
+}
+
+/* ===== Usuários e permissões ===== */
+.users {
+  padding: 1.25rem;
+}
+.users > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.875rem;
+  margin-bottom: 1.125rem;
+}
+.users > header h2 {
+  font-size: 0.875rem;
+  margin: 0;
+}
+.users > header p {
+  font-size: 0.625rem;
+  color: var(--muted);
+  margin: 0.3125rem 0 0;
+}
+.users td button {
+  margin-right: 0.375rem;
+}
+.modalform .wide {
+  grid-column: 1 / -1;
+}
+.form > small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.625rem;
+}
+.form .login-error {
+  margin-bottom: 0.8125rem;
+}
+
+/* ===== Painel de projetos (dashboard) e rodapé de painéis ===== */
+.rows.proj > div {
+  grid-template-columns: 1fr auto;
+  row-gap: 0.5rem;
+  padding: 0.75rem 0;
+}
+.rows.proj > div > i {
+  grid-column: 1 / -1;
+  display: block;
+  height: 0.25rem;
+  border-radius: 0.25rem;
+  background: #23271f;
+  overflow: hidden;
+}
+.rows.proj > div > i b {
+  display: block;
+  height: 100%;
+  background: var(--lime);
+}
+.panel-foot {
+  padding: 0.25rem 1.125rem 1.125rem;
+}
+.panel-foot .btn {
+  width: 100%;
+  justify-content: center;
 }

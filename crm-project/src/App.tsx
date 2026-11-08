@@ -9,12 +9,12 @@ import {
   CircleDollarSign,
   Download,
   FileBarChart,
-  Filter,
   KanbanSquare,
   LayoutDashboard,
   ListTodo,
   LogOut,
   Menu,
+  KeyRound,
   Plus,
   ReceiptText,
   Search,
@@ -33,6 +33,7 @@ import {
   setStoredUser,
   getStoredUser,
   type AuthUser,
+  type ApiUser,
 } from "./lib/api";
 import {
   mapLead,
@@ -69,6 +70,17 @@ const brl = (n: number) =>
     maximumFractionDigits: 0,
   }).format(n);
 
+const downloadCsv = (name: string, rows: string[][]) => {
+  const esc = (v: string) => (/[",;\n]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v);
+  const body = rows.map((r) => r.map(esc).join(";")).join("\n");
+  const blob = new Blob(["\ufeff" + body], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
 const stages: Status[] = [
   "Novo",
   "Primeiro contato",
@@ -95,8 +107,8 @@ const nav: [Page, typeof LayoutDashboard][] = [
 
 // ===== Login =====
 function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token: string) => void | Promise<void> }) {
-  const [email, setEmail] = useState("rafael@nodulo.studio");
-  const [password, setPassword] = useState("123456");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -118,14 +130,14 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token: string) => vo
     <div className="shell login-shell">
       <form className="login-card" onSubmit={submit}>
         <div className="brand">
-          <b>N</b>
+          <b>P</b>
           <span>
-            <strong>NÓDULO</strong>
+            <strong>PRYSM</strong>
             <small>gestão comercial</small>
           </span>
         </div>
         <h1>Entrar no CRM</h1>
-        <p>Use as credenciais do ambiente conectado ao backend.</p>
+        <p>Acesse com seu e-mail e senha.</p>
         {error && <div className="login-error">{error}</div>}
         <label>
           E-mail
@@ -134,6 +146,7 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token: string) => vo
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            autoFocus
             autoComplete="username"
           />
         </label>
@@ -150,9 +163,6 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token: string) => vo
         <button className="btn" type="submit" disabled={loading}>
           {loading ? "Entrando..." : "Entrar"}
         </button>
-        <small className="login-hint">
-          Demo: rafael@nodulo.studio / 123456
-        </small>
       </form>
     </div>
   );
@@ -171,7 +181,7 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [money, setMoney] = useState<Money[]>([]);
-  const [modal, setModal] = useState<"lead" | "task" | "expense" | null>(null);
+  const [modal, setModal] = useState<"lead" | "task" | "expense" | "project" | "revenue" | null>(null);
   const [editing, setEditing] = useState<Lead | null>(null);
   const [remove, setRemove] = useState<Lead | null>(null);
   const [toast, setToast] = useState("");
@@ -330,6 +340,40 @@ export default function App() {
     }
   };
 
+  const createRevenue = async (name: string, value: string) => {
+    try {
+      const created = await api.createFinance({
+        name,
+        value: Number(value.replace(",", ".")),
+        kind: "RECEITA",
+        status: "PENDENTE",
+        relation: "Receita",
+        category: "Receita",
+      });
+      setMoney((v) => [mapFinance(created), ...v]);
+      setModal(null);
+      notify("Receita registrada");
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Erro ao registrar receita");
+    }
+  };
+
+  const createProject = async (name: string, clientId: string, value: string) => {
+    try {
+      const created = await api.createProject({
+        name,
+        clientId,
+        value: Number((value || "0").replace(",", ".")),
+        status: "EM_DESENVOLVIMENTO",
+      });
+      setProjects((v) => [mapProject(created), ...v]);
+      setModal(null);
+      notify("Projeto criado");
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Erro ao criar projeto");
+    }
+  };
+
   const result = useMemo(
     () =>
       [
@@ -369,9 +413,9 @@ export default function App() {
       {menu && <button className="shade" onClick={() => setMenu(false)} />}
       <aside className={menu ? "open" : ""}>
         <div className="brand">
-          <b>N</b>
+          <b>P</b>
           <span>
-            <strong>NÓDULO</strong>
+            <strong>PRYSM</strong>
             <small>gestão comercial</small>
           </span>
         </div>
@@ -386,7 +430,7 @@ export default function App() {
                 setMenu(false);
               }}
             >
-              <I size={17} />
+              <I size={20} />
               {n}
               {n === "Tarefas" && tasks.filter((t) => t.status !== "Concluída").length > 0 && (
                 <em>{tasks.filter((t) => t.status !== "Concluída").length}</em>
@@ -408,10 +452,10 @@ export default function App() {
       <main>
         <header>
           <button className="icon mobile" onClick={() => setMenu(true)}>
-            <Menu size={18} />
+            <Menu size={22} />
           </button>
           <div className="search">
-            <Search size={16} />
+            <Search size={19} />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -434,9 +478,9 @@ export default function App() {
               </div>
             )}
           </div>
-          <span className="demo">{loading ? "● Sincronizando..." : "● API conectada"}</span>
+          <span className="status">{loading ? "● Sincronizando..." : "● API conectada"}</span>
           <button className="icon" title="Atualizar dados" onClick={() => loadData()}>
-            <Bell size={17} />
+            <Bell size={20} />
           </button>
           <div className="user">
             <b>{initials}</b>
@@ -444,8 +488,8 @@ export default function App() {
               {user.name}
               <small>{user.role}</small>
             </span>
-            <button className="icon" title="Sair" onClick={handleLogout} style={{ marginLeft: 4 }}>
-              <LogOut size={14} />
+            <button className="icon" title="Sair" onClick={handleLogout} style={{ marginLeft: 5 }}>
+              <LogOut size={17} />
             </button>
           </div>
         </header>
@@ -479,14 +523,14 @@ export default function App() {
             <Pipeline leads={leads} move={move} add={() => setModal("lead")} />
           )}
           {page === "Clientes" && <Clients clients={clients} projects={projects} />}
-          {page === "Projetos" && <Projects projects={projects} clients={clients} />}
+          {page === "Projetos" && <Projects projects={projects} clients={clients} add={() => setModal("project")} />}
           {page === "Tarefas" && (
             <Tasks tasks={tasks} onToggle={toggleTask} add={() => setModal("task")} />
           )}
-          {page === "Financeiro" && <Finance money={money} clients={clients} />}
+          {page === "Financeiro" && <Finance money={money} clients={clients} add={() => setModal("revenue")} />}
           {page === "Despesas" && <Expenses money={money} add={() => setModal("expense")} />}
           {page === "Relatórios" && <Reports leads={leads} money={money} />}
-          {page === "Configurações" && <SettingsPage notify={notify} />}
+          {page === "Configurações" && <SettingsPage notify={notify} user={user} />}
         </section>
       </main>
       {modal === "lead" && (
@@ -494,6 +538,12 @@ export default function App() {
       )}
       {modal === "task" && (
         <QuickForm type="task" close={() => setModal(null)} save={createTask} />
+      )}
+      {modal === "revenue" && (
+        <QuickForm type="revenue" close={() => setModal(null)} save={createRevenue} />
+      )}
+      {modal === "project" && (
+        <ProjectForm clients={clients} close={() => setModal(null)} save={createProject} />
       )}
       {modal === "expense" && (
         <QuickForm type="expense" close={() => setModal(null)} save={createExpense} />
@@ -516,7 +566,7 @@ export default function App() {
       )}
       {toast && (
         <div className="toast">
-          <Check size={14} />
+          <Check size={17} />
           {toast}
         </div>
       )}
@@ -550,13 +600,22 @@ function Btn({
   children,
   onClick,
   plain = false,
+  submit = false,
+  disabled = false,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   plain?: boolean;
+  submit?: boolean;
+  disabled?: boolean;
 }) {
   return (
-    <button className={`btn ${plain ? "plain" : ""}`} onClick={onClick} type="button">
+    <button
+      className={`btn ${plain ? "plain" : ""}`}
+      onClick={onClick}
+      type={submit ? "submit" : "button"}
+      disabled={disabled}
+    >
       {children}
     </button>
   );
@@ -581,7 +640,7 @@ function Metric({ name, value, Icon }: { name: string; value: string; Icon: type
       <span>
         {name}
         <i>
-          <Icon size={16} />
+          <Icon size={19} />
         </i>
       </span>
       <strong>{value}</strong>
@@ -591,14 +650,18 @@ function Metric({ name, value, Icon }: { name: string; value: string; Icon: type
     </article>
   );
 }
-function PanelHead({ title, sub }: { title: string; sub: string }) {
+function PanelHead({ title, sub, onMore }: { title: string; sub: string; onMore?: () => void }) {
   return (
     <div className="panelhead">
       <div>
         <h2>{title}</h2>
         <p>{sub}</p>
       </div>
-      <button type="button">Ver detalhes ›</button>
+      {onMore && (
+        <button type="button" onClick={onMore}>
+          Ver detalhes ›
+        </button>
+      )}
     </div>
   );
 }
@@ -634,11 +697,16 @@ function Dashboard({
   return (
     <>
       <Head title={`Bom dia, ${userName}`} sub="Aqui está o pulso da sua operação hoje.">
-        <Btn plain>
-          <CalendarDays size={15} /> Últimos 30 dias
-        </Btn>
-        <Btn plain>
-          <Download size={15} /> Exportar
+        <Btn
+          plain
+          onClick={() =>
+            downloadCsv("leads.csv", [
+              ["Empresa", "Contato", "Status", "Valor", "Probabilidade"],
+              ...leads.map((x) => [x.company, x.contact, x.status, String(x.value), String(x.probability)]),
+            ])
+          }
+        >
+          <Download size={18} /> Exportar leads
         </Btn>
       </Head>
       <div className="metrics">
@@ -649,7 +717,7 @@ function Dashboard({
       </div>
       <div className="dash">
         <article className="panel chart">
-          <PanelHead title="Desempenho financeiro" sub="Receitas, despesas e lucro realizado" />
+          <PanelHead title="Desempenho financeiro" sub="Receitas, despesas e lucro realizado" onMore={() => go("Financeiro")} />
           <div className="chartnums">
             <span>
               Receita <b>{brl(rec)}</b>
@@ -681,7 +749,7 @@ function Dashboard({
           </svg>
         </article>
         <article className="panel funnel">
-          <PanelHead title="Funil de vendas" sub={`${leads.length} oportunidades no período`} />
+          <PanelHead title="Funil de vendas" sub={`${leads.length} oportunidades no período`} onMore={() => go("Pipeline")} />
           {["Novo", "Interessado", "Proposta enviada", "Em negociação", "Ganho"].map((s, i) => {
             const n = leads.filter((x) => (i === 0 ? true : x.status === s)).length;
             return (
@@ -700,7 +768,7 @@ function Dashboard({
       </div>
       <div className="twocol">
         <article className="panel">
-          <PanelHead title="Próximas ações" sub="Itens que precisam da sua atenção" />
+          <PanelHead title="Próximas ações" sub="Itens que precisam da sua atenção" onMore={() => go("Tarefas")} />
           <div className="rows">
             {tasks.slice(0, 5).map((x) => (
               <div key={x.id}>
@@ -718,8 +786,8 @@ function Dashboard({
           </div>
         </article>
         <article className="panel">
-          <PanelHead title="Projetos em andamento" sub={`${projects.length} projetos`} />
-          <div className="rows">
+          <PanelHead title="Projetos em andamento" sub={`${projects.length} projetos`} onMore={() => go("Projetos")} />
+          <div className="rows proj">
             {projects.slice(0, 5).map((x) => (
               <div key={x.id}>
                 <span>
@@ -729,13 +797,18 @@ function Dashboard({
                   </small>
                 </span>
                 <strong>{brl(x.value)}</strong>
+                <i>
+                  <b style={{ width: `${x.progress}%` }} />
+                </i>
               </div>
             ))}
             {projects.length === 0 && <p className="note">Nenhum projeto ainda.</p>}
           </div>
-          <button type="button" className="btn plain" onClick={() => go("Projetos")}>
-            Ver todos os projetos
-          </button>
+          <div className="panel-foot">
+            <button type="button" className="btn plain" onClick={() => go("Projetos")}>
+              Ver todos os projetos
+            </button>
+          </div>
         </article>
       </div>
     </>
@@ -744,7 +817,7 @@ function Dashboard({
 function Clock() {
   return (
     <i className="clock">
-      <CalendarDays size={14} />
+      <CalendarDays size={17} />
     </i>
   );
 }
@@ -769,24 +842,19 @@ function Leads({
       (x.company + x.contact).toLowerCase().includes(q.toLowerCase()),
   );
   const csv = () => {
-    const rows = [
+    downloadCsv("leads.csv", [
       ["Empresa", "Contato", "Status", "Valor", "Probabilidade"],
       ...filtered.map((x) => [x.company, x.contact, x.status, String(x.value), String(x.probability)]),
-    ];
-    const blob = new Blob([rows.map((r) => r.join(",")).join("\n")], { type: "text/csv" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "leads.csv";
-    a.click();
+    ]);
   };
   return (
     <>
       <Head k="COMERCIAL" title="Leads" sub={`${leads.length} oportunidades registradas na base.`}>
         <Btn plain onClick={csv}>
-          <Download size={15} /> Exportar
+          <Download size={18} /> Exportar
         </Btn>
         <Btn onClick={add}>
-          <Plus size={16} /> Novo lead
+          <Plus size={19} /> Novo lead
         </Btn>
       </Head>
       <div className="strip">
@@ -804,7 +872,7 @@ function Leads({
       <article className="panel table">
         <div className="tools">
           <div>
-            <Search size={15} />
+            <Search size={18} />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -817,9 +885,6 @@ function Leads({
               <option key={x}>{x}</option>
             ))}
           </select>
-          <button type="button">
-            <Filter size={14} /> Mais filtros
-          </button>
         </div>
         <Table leads={filtered} edit={edit} remove={remove} />
       </article>
@@ -881,7 +946,7 @@ function Table({
                   Editar
                 </button>
                 <button type="button" onClick={() => remove(x)}>
-                  <Trash2 size={14} />
+                  <Trash2 size={17} />
                 </button>
               </td>
             </tr>
@@ -909,7 +974,7 @@ function Pipeline({
         sub="Arraste oportunidades entre etapas para atualizar o funil."
       >
         <Btn onClick={add}>
-          <Plus size={16} /> Nova oportunidade
+          <Plus size={19} /> Nova oportunidade
         </Btn>
       </Head>
       <div className="strip">
@@ -984,8 +1049,16 @@ function Clients({ clients, projects }: { clients: Client[]; projects: Project[]
   return (
     <>
       <Head k="COMERCIAL" title="Clientes" sub={`${clients.length} clientes ativos.`}>
-        <Btn plain>
-          <Download size={15} /> Exportar
+        <Btn
+          plain
+          onClick={() =>
+            downloadCsv("clientes.csv", [
+              ["Empresa", "Contato", "Valor"],
+              ...clients.map((x) => [x.company, x.contact, String(x.value)]),
+            ])
+          }
+        >
+          <Download size={18} /> Exportar
         </Btn>
       </Head>
       <article className="panel table">
@@ -1022,12 +1095,12 @@ function Clients({ clients, projects }: { clients: Client[]; projects: Project[]
     </>
   );
 }
-function Projects({ projects, clients }: { projects: Project[]; clients: Client[] }) {
+function Projects({ projects, clients, add }: { projects: Project[]; clients: Client[]; add: () => void }) {
   return (
     <>
       <Head k="OPERAÇÃO" title="Projetos" sub={`${projects.length} projetos em gestão.`}>
-        <Btn plain>
-          <Plus size={16} /> Novo projeto
+        <Btn onClick={add}>
+          <Plus size={19} /> Novo projeto
         </Btn>
       </Head>
       <article className="panel">
@@ -1068,7 +1141,7 @@ function Tasks({
     <>
       <Head k="ACOMPANHAMENTO" title="Tarefas" sub="Prioridades comerciais e operacionais.">
         <Btn onClick={add}>
-          <Plus size={16} /> Nova tarefa
+          <Plus size={19} /> Nova tarefa
         </Btn>
       </Head>
       <div className="taskboard">
@@ -1083,7 +1156,7 @@ function Tasks({
               .map((x) => (
                 <article key={x.id}>
                   <button type="button" onClick={() => onToggle(x)}>
-                    {x.status === "Concluída" && <Check size={12} />}
+                    {x.status === "Concluída" && <Check size={14} />}
                   </button>
                   <span>
                     <strong>{x.title}</strong>
@@ -1101,7 +1174,7 @@ function Tasks({
     </>
   );
 }
-function Finance({ money, clients }: { money: Money[]; clients: Client[] }) {
+function Finance({ money, clients, add }: { money: Money[]; clients: Client[]; add: () => void }) {
   const rec = money.filter((x) => x.kind === "receita"),
     exp = money.filter((x) => x.kind === "despesa"),
     paid = rec.filter((x) => x.status === "Pago").reduce((s, x) => s + x.value, 0),
@@ -1113,8 +1186,8 @@ function Finance({ money, clients }: { money: Money[]; clients: Client[] }) {
         title="Visão financeira"
         sub="Contrato, faturamento e caixa tratados separadamente."
       >
-        <Btn>
-          <Plus size={16} /> Nova receita
+        <Btn onClick={add}>
+          <Plus size={19} /> Nova receita
         </Btn>
       </Head>
       <div className="metrics four">
@@ -1140,7 +1213,7 @@ function Expenses({ money, add }: { money: Money[]; add: () => void }) {
     <>
       <Head k="FINANCEIRO" title="Despesas" sub="Custos operacionais e de projetos.">
         <Btn onClick={add}>
-          <Plus size={16} /> Nova despesa
+          <Plus size={19} /> Nova despesa
         </Btn>
       </Head>
       <div className="strip">
@@ -1241,7 +1314,66 @@ function Reports({ leads, money }: { leads: Lead[]; money: Money[] }) {
   );
 }
 
-function SettingsPage({ notify }: { notify: (s: string) => void }) {
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Administrador",
+  COMERCIAL: "Comercial",
+  FINANCEIRO: "Financeiro",
+  OPERACIONAL: "Operacional",
+};
+
+type SettingsTab = "empresa" | "usuarios" | "senha" | "breve";
+
+function SettingsPage({ notify, user }: { notify: (s: string) => void; user: AuthUser }) {
+  const isAdmin = user.role === "ADMIN";
+  const [tab, setTab] = useState<SettingsTab>("empresa");
+  const [soon, setSoon] = useState("");
+
+  const items: { id: SettingsTab; label: string; Icon: typeof UserRound; hidden?: boolean; soon?: boolean }[] = [
+    { id: "empresa", label: "Dados da empresa", Icon: UserRound },
+    { id: "usuarios", label: "Usuários e permissões", Icon: UsersRound, hidden: !isAdmin },
+    { id: "senha", label: "Minha senha", Icon: KeyRound },
+    { id: "breve", label: "Status do pipeline", Icon: KanbanSquare, soon: true },
+    { id: "breve", label: "Categorias financeiras", Icon: WalletCards, soon: true },
+    { id: "breve", label: "Pacotes de serviços", Icon: BriefcaseBusiness, soon: true },
+    { id: "breve", label: "Notificações", Icon: Bell, soon: true },
+  ];
+
+  return (
+    <>
+      <Head k="ADMINISTRAÇÃO" title="Configurações" sub="Personalize o CRM e o acesso da equipe." />
+      <div className="settings">
+        <nav>
+          {items
+            .filter((it) => !it.hidden)
+            .map((it) => (
+              <button
+                className={(it.soon ? soon === it.label : tab === it.id) ? "active" : ""}
+                key={it.label}
+                type="button"
+                onClick={() => {
+                  setTab(it.id);
+                  setSoon(it.soon ? it.label : "");
+                }}
+              >
+                <it.Icon size={23} /> {it.label}
+              </button>
+            ))}
+        </nav>
+        {tab === "empresa" && <CompanyPanel notify={notify} canEdit={isAdmin} />}
+        {tab === "usuarios" && isAdmin && <UsersPanel notify={notify} me={user} />}
+        {tab === "senha" && <PasswordPanel notify={notify} />}
+        {tab === "breve" && (
+          <article className="panel form">
+            <h2>{soon}</h2>
+            <p>Esta configuração ainda não está disponível.</p>
+          </article>
+        )}
+      </div>
+    </>
+  );
+}
+
+function CompanyPanel({ notify, canEdit }: { notify: (s: string) => void; canEdit: boolean }) {
   const [name, setName] = useState("");
   const [cnpj, setCnpj] = useState("");
   const [email, setEmail] = useState("");
@@ -1277,62 +1409,311 @@ function SettingsPage({ notify }: { notify: (s: string) => void }) {
   };
 
   return (
-    <>
-      <Head k="ADMINISTRAÇÃO" title="Configurações" sub="Personalize o CRM e o acesso da equipe." />
-      <div className="settings">
-        <nav>
-          {[
-            ["Dados da empresa", UserRound],
-            ["Usuários e permissões", UsersRound],
-            ["Status do pipeline", KanbanSquare],
-            ["Categorias financeiras", WalletCards],
-            ["Pacotes de serviços", BriefcaseBusiness],
-            ["Notificações", Bell],
-          ].map(([s, I], i) => (
-            <button className={i === 0 ? "active" : ""} key={s as string} type="button">
-              {<I size={16} />} {s as string}
-            </button>
-          ))}
-        </nav>
-        <article className="panel form">
-          <h2>Dados da empresa</h2>
-          <p>Informações usadas em propostas e relatórios.</p>
-          {loading ? (
-            <p>Carregando...</p>
+    <article className="panel form">
+      <h2>Dados da empresa</h2>
+      <p>Informações usadas em propostas e relatórios.</p>
+      {loading ? (
+        <p>Carregando...</p>
+      ) : (
+        <>
+          <label>
+            Nome da empresa
+            <input value={name} onChange={(e) => setName(e.target.value)} readOnly={!canEdit} />
+          </label>
+          <div>
+            <label>
+              CNPJ
+              <input
+                placeholder="00.000.000/0001-00"
+                value={cnpj}
+                onChange={(e) => setCnpj(e.target.value)}
+                readOnly={!canEdit}
+              />
+            </label>
+            <label>
+              E-mail
+              <input value={email} onChange={(e) => setEmail(e.target.value)} readOnly={!canEdit} />
+            </label>
+          </div>
+          <label>
+            Endereço
+            <input value={address} onChange={(e) => setAddress(e.target.value)} readOnly={!canEdit} />
+          </label>
+          {canEdit ? (
+            <Btn onClick={save} disabled={saving}>
+              {saving ? "Salvando..." : "Salvar alterações"}
+            </Btn>
           ) : (
-            <>
-              <label>
-                Nome da empresa
-                <input value={name} onChange={(e) => setName(e.target.value)} />
-              </label>
-              <div>
-                <label>
-                  CNPJ
-                  <input
-                    placeholder="00.000.000/0001-00"
-                    value={cnpj}
-                    onChange={(e) => setCnpj(e.target.value)}
-                  />
-                </label>
-                <label>
-                  E-mail
-                  <input value={email} onChange={(e) => setEmail(e.target.value)} />
-                </label>
-              </div>
-              <label>
-                Endereço
-                <input value={address} onChange={(e) => setAddress(e.target.value)} />
-              </label>
-              <Btn onClick={save}>{saving ? "Salvando..." : "Salvar alterações"}</Btn>
-              <aside>
-                <strong>Banco de dados conectado</strong>
-                <small>Autenticação, RBAC e persistência ativos via API.</small>
-              </aside>
-            </>
+            <small>Somente administradores podem alterar os dados da empresa.</small>
           )}
-        </article>
-      </div>
-    </>
+        </>
+      )}
+    </article>
+  );
+}
+
+function PasswordPanel({ notify }: { notify: (s: string) => void }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (next !== confirm) {
+      setError("A confirmação não é igual à nova senha.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.changePassword(current, next);
+      setCurrent("");
+      setNext("");
+      setConfirm("");
+      notify("Senha alterada com sucesso");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao alterar a senha");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form className="panel form" onSubmit={submit}>
+      <h2>Minha senha</h2>
+      <p>Use pelo menos 8 caracteres.</p>
+      {error && <div className="login-error">{error}</div>}
+      <label>
+        Senha atual
+        <input
+          type="password"
+          value={current}
+          onChange={(e) => setCurrent(e.target.value)}
+          required
+          autoComplete="current-password"
+        />
+      </label>
+      <label>
+        Nova senha
+        <input
+          type="password"
+          value={next}
+          onChange={(e) => setNext(e.target.value)}
+          required
+          minLength={8}
+          autoComplete="new-password"
+        />
+      </label>
+      <label>
+        Confirmar nova senha
+        <input
+          type="password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          required
+          minLength={8}
+          autoComplete="new-password"
+        />
+      </label>
+      <Btn submit disabled={saving}>
+        {saving ? "Salvando..." : "Alterar senha"}
+      </Btn>
+    </form>
+  );
+}
+
+function UsersPanel({ notify, me }: { notify: (s: string) => void; me: AuthUser }) {
+  const [users, setUsers] = useState<ApiUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState<{ user: ApiUser | null } | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setUsers(await api.getUsers());
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Erro ao carregar usuários");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const toggleActive = async (u: ApiUser) => {
+    try {
+      const updated = await api.updateUser(u.id, { active: !u.active });
+      setUsers((v) => v.map((x) => (x.id === u.id ? { ...x, ...updated } : x)));
+      notify(updated.active ? `${u.name} reativado(a)` : `${u.name} desativado(a)`);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Erro ao atualizar usuário");
+    }
+  };
+
+  return (
+    <article className="panel users">
+      <header>
+        <span>
+          <h2>Usuários e permissões</h2>
+          <p>Crie o acesso real de cada pessoa da equipe e defina o perfil dela.</p>
+        </span>
+        <Btn onClick={() => setForm({ user: null })}>
+          <Plus size={18} /> Novo usuário
+        </Btn>
+      </header>
+      {loading ? (
+        <p>Carregando...</p>
+      ) : (
+        <div className="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>USUÁRIO</th>
+                <th>PERFIL</th>
+                <th>STATUS</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id}>
+                  <td>
+                    <div className="entity">
+                      <b>{u.name[0]?.toUpperCase()}</b>
+                      <span>
+                        <strong>
+                          {u.name}
+                          {u.id === me.id ? " (você)" : ""}
+                        </strong>
+                        <small>{u.email}</small>
+                      </span>
+                    </div>
+                  </td>
+                  <td>{ROLE_LABEL[u.role] ?? u.role}</td>
+                  <td>
+                    <span className={`badge ${u.active ? "ganho" : "perdido"}`}>
+                      <i />
+                      {u.active ? "Ativo" : "Inativo"}
+                    </span>
+                  </td>
+                  <td>
+                    <button type="button" onClick={() => setForm({ user: u })}>
+                      Editar
+                    </button>
+                    {u.id !== me.id && (
+                      <button type="button" onClick={() => toggleActive(u)}>
+                        {u.active ? "Desativar" : "Reativar"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {form && (
+        <UserForm
+          user={form.user}
+          close={() => setForm(null)}
+          onSaved={(saved, created) => {
+            setUsers((v) =>
+              created ? [...v, saved].sort((a, b) => a.name.localeCompare(b.name)) : v.map((x) => (x.id === saved.id ? { ...x, ...saved } : x)),
+            );
+            setForm(null);
+            notify(created ? "Usuário criado" : "Usuário atualizado");
+          }}
+        />
+      )}
+    </article>
+  );
+}
+
+function UserForm({
+  user,
+  close,
+  onSaved,
+}: {
+  user: ApiUser | null;
+  close: () => void;
+  onSaved: (u: ApiUser, created: boolean) => void;
+}) {
+  const [name, setName] = useState(user?.name ?? "");
+  const [email, setEmail] = useState(user?.email ?? "");
+  const [role, setRole] = useState(user?.role ?? "COMERCIAL");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSaving(true);
+    try {
+      if (user) {
+        const data: { name: string; email: string; role: string; password?: string } = { name, email, role };
+        if (password) data.password = password;
+        onSaved(await api.updateUser(user.id, data), false);
+      } else {
+        onSaved(await api.createUser({ name, email, role, password }), true);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao salvar usuário");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      title={user ? "Editar usuário" : "Novo usuário"}
+      sub={user ? "Altere os dados ou redefina a senha." : "A pessoa entra com este e-mail e senha."}
+      close={close}
+    >
+      <form className="modalform" onSubmit={submit}>
+        {error && <div className="login-error wide">{error}</div>}
+        <label>
+          Nome
+          <input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
+        </label>
+        <label>
+          E-mail
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        </label>
+        <label>
+          Perfil
+          <select value={role} onChange={(e) => setRole(e.target.value)}>
+            {Object.entries(ROLE_LABEL).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {user ? "Nova senha (opcional)" : "Senha"}
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required={!user}
+            minLength={8}
+            placeholder={user ? "Deixe em branco para manter" : "Mínimo de 8 caracteres"}
+            autoComplete="new-password"
+          />
+        </label>
+        <footer>
+          <Btn plain onClick={close}>
+            Cancelar
+          </Btn>
+          <Btn submit disabled={saving}>
+            {saving ? "Salvando..." : user ? "Salvar alterações" : "Criar usuário"}
+          </Btn>
+        </footer>
+      </form>
+    </Modal>
   );
 }
 
@@ -1356,7 +1737,7 @@ function Modal({
             <p>{sub}</p>
           </span>
           <button type="button" onClick={close}>
-            <X size={18} />
+            <X size={22} />
           </button>
         </header>
         {children}
@@ -1442,7 +1823,63 @@ function LeadForm({
           <Btn plain onClick={close}>
             Cancelar
           </Btn>
-          <Btn>Salvar lead</Btn>
+          <Btn submit>Salvar lead</Btn>
+        </footer>
+      </form>
+    </Modal>
+  );
+}
+function ProjectForm({
+  clients,
+  close,
+  save,
+}: {
+  clients: Client[];
+  close: () => void;
+  save: (name: string, clientId: string, value: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [clientId, setClientId] = useState(clients[0]?.id ?? "");
+  const [value, setValue] = useState("");
+  return (
+    <Modal title="Novo projeto" sub="Todo projeto pertence a um cliente." close={close}>
+      <form
+        className="modalform"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save(name, clientId, value);
+        }}
+      >
+        {clients.length === 0 && (
+          <div className="login-error wide">
+            Ainda não há clientes. Marque um lead como "Ganho" para criar o primeiro cliente.
+          </div>
+        )}
+        <label>
+          Nome do projeto
+          <input value={name} onChange={(e) => setName(e.target.value)} required />
+        </label>
+        <label>
+          Cliente
+          <select value={clientId} onChange={(e) => setClientId(e.target.value)} required>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.company}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Valor (R$)
+          <input value={value} onChange={(e) => setValue(e.target.value)} inputMode="decimal" />
+        </label>
+        <footer>
+          <Btn plain onClick={close}>
+            Cancelar
+          </Btn>
+          <Btn submit disabled={clients.length === 0}>
+            Criar projeto
+          </Btn>
         </footer>
       </form>
     </Modal>
@@ -1453,7 +1890,7 @@ function QuickForm({
   close,
   save,
 }: {
-  type: "task" | "expense";
+  type: "task" | "expense" | "revenue";
   close: () => void;
   save: (a: string, b: string) => void;
 }) {
@@ -1461,7 +1898,7 @@ function QuickForm({
     [b, setB] = useState("");
   return (
     <Modal
-      title={type === "task" ? "Nova tarefa" : "Nova despesa"}
+      title={type === "task" ? "Nova tarefa" : type === "revenue" ? "Nova receita" : "Nova despesa"}
       sub="O registro ficará integrado à operação."
       close={close}
     >
@@ -1484,7 +1921,7 @@ function QuickForm({
           <Btn plain onClick={close}>
             Cancelar
           </Btn>
-          <Btn>{type === "task" ? "Criar tarefa" : "Registrar despesa"}</Btn>
+          <Btn submit>{type === "task" ? "Criar tarefa" : type === "revenue" ? "Registrar receita" : "Registrar despesa"}</Btn>
         </footer>
       </form>
     </Modal>

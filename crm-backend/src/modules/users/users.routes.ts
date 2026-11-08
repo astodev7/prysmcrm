@@ -5,20 +5,49 @@ import { prisma } from "../../config/prisma.js";
 import { env } from "../../config/env.js";
 import { AppError } from "../../utils/errors.js";
 
+const roleEnum = z.enum(["ADMIN", "COMERCIAL", "FINANCEIRO", "OPERACIONAL"]);
+const email = z.string().trim().toLowerCase().email();
+const password = z.string().min(8, "A senha precisa ter pelo menos 8 caracteres");
+
 const createUserSchema = z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-  password: z.string().min(6),
-  role: z.enum(["ADMIN", "COMERCIAL", "FINANCEIRO", "OPERACIONAL"]).default("COMERCIAL"),
+  name: z.string().trim().min(2),
+  email,
+  password,
+  role: roleEnum.default("COMERCIAL"),
 });
 
 const updateUserSchema = z.object({
-  name: z.string().min(2).optional(),
-  email: z.string().email().optional(),
-  password: z.string().min(6).optional(),
-  role: z.enum(["ADMIN", "COMERCIAL", "FINANCEIRO", "OPERACIONAL"]).optional(),
+  name: z.string().trim().min(2).optional(),
+  email: email.optional(),
+  password: password.optional(),
+  role: roleEnum.optional(),
   active: z.boolean().optional(),
 });
+
+const publicUser = {
+  id: true,
+  name: true,
+  email: true,
+  role: true,
+  active: true,
+  createdAt: true,
+} as const;
+
+function prismaCode(err: unknown): string | undefined {
+  return typeof err === "object" && err !== null && "code" in err
+    ? String((err as { code: unknown }).code)
+    : undefined;
+}
+
+/** Garante que sempre sobre ao menos 1 ADMIN ativo no sistema. */
+async function assertAnotherActiveAdmin(excludingUserId: string) {
+  const others = await prisma.user.count({
+    where: { role: "ADMIN", active: true, id: { not: excludingUserId } },
+  });
+  if (others === 0) {
+    throw new AppError("O sistema precisa ter pelo menos um administrador ativo", 400);
+  }
+}
 
 export async function usersRoutes(app: FastifyInstance) {
   // Listar usuários (ADMIN)
@@ -27,14 +56,7 @@ export async function usersRoutes(app: FastifyInstance) {
     { onRequest: [app.authorize("ADMIN")] },
     async () => {
       return prisma.user.findMany({
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          active: true,
-          createdAt: true,
-        },
+        select: publicUser,
         orderBy: { name: "asc" },
       });
     },
@@ -59,7 +81,7 @@ export async function usersRoutes(app: FastifyInstance) {
           password: hash,
           role: body.role,
         },
-        select: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
+        select: publicUser,
       });
 
       return reply.status(201).send(user);
@@ -74,24 +96,44 @@ export async function usersRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string };
       const body = updateUserSchema.parse(request.body);
 
-      const data: Record<string, unknown> = { ...body };
-      if (body.password) {
-        data.password = await bcrypt.hash(body.password, env.BCRYPT_SALT_ROUNDS);
+      const target = await prisma.user.findUnique({ where: { id } });
+      if (!target) throw new AppError("Usuário não encontrado", 404);
+
+      const isSelf = id === request.user.sub;
+      const losesAdmin =
+        (body.role !== undefined && body.role !== "ADMIN" && target.role === "ADMIN") ||
+        (body.active === false && target.role === "ADMIN");
+
+      if (isSelf && losesAdmin) {
+        throw new AppError("Você não pode remover seu próprio acesso de administrador", 400);
+      }
+      if (isSelf && body.active === false) {
+        throw new AppError("Você não pode desativar a si mesmo", 400);
+      }
+      if (losesAdmin && target.active) {
+        await assertAnotherActiveAdmin(id);
+      }
+
+      const { password: newPassword, ...rest } = body;
+      const data: Record<string, unknown> = { ...rest };
+      if (newPassword) {
+        data.password = await bcrypt.hash(newPassword, env.BCRYPT_SALT_ROUNDS);
       }
 
       try {
         return await prisma.user.update({
           where: { id },
           data,
-          select: { id: true, name: true, email: true, role: true, active: true, updatedAt: true },
+          select: publicUser,
         });
-      } catch {
+      } catch (err) {
+        if (prismaCode(err) === "P2002") throw new AppError("E-mail já cadastrado", 409);
         throw new AppError("Usuário não encontrado", 404);
       }
     },
   );
 
-  // Desativar usuário (ADMIN)
+  // Desativar usuário (ADMIN) — não apaga, só impede o login
   app.delete(
     "/:id",
     { onRequest: [app.authorize("ADMIN")] },
@@ -102,15 +144,18 @@ export async function usersRoutes(app: FastifyInstance) {
         throw new AppError("Você não pode desativar a si mesmo", 400);
       }
 
-      try {
-        return await prisma.user.update({
-          where: { id },
-          data: { active: false },
-          select: { id: true, name: true, active: true },
-        });
-      } catch {
-        throw new AppError("Usuário não encontrado", 404);
+      const target = await prisma.user.findUnique({ where: { id } });
+      if (!target) throw new AppError("Usuário não encontrado", 404);
+
+      if (target.role === "ADMIN" && target.active) {
+        await assertAnotherActiveAdmin(id);
       }
+
+      return prisma.user.update({
+        where: { id },
+        data: { active: false },
+        select: { id: true, name: true, active: true },
+      });
     },
   );
 }
