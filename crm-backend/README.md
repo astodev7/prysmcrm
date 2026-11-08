@@ -1,4 +1,4 @@
-# CRM Comercial e Financeiro — Backend
+# CRM Comercial e Financeiro — Backend.
 
 API REST completa para o CRM (Leads, Pipeline, Clientes, Projetos, Tarefas, Financeiro + Auth/RBAC).
 
