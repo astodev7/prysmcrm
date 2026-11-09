@@ -152,7 +152,7 @@ export async function financeRoutes(app: FastifyInstance) {
           data: {
             ...body,
             dueDate: body.dueDate ? new Date(body.dueDate) : undefined,
-            paidAt: body.paidAt ? new Date(body.paidAt) : undefined,
+            paidAt: body.paidAt ? new Date(body.paidAt) : body.status === "PAGO" ? new Date() : body.status ? null : undefined,
           },
         });
         return { ...item, value: Number(item.value) };

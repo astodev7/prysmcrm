@@ -361,6 +361,15 @@ export default function App() {
     }
   };
 
+  const changeFinanceStatus = async (item: Money, status: string) => {
+    const codes: Record<string, string> = { Pendente: "PENDENTE", Pago: "PAGO", Atrasado: "ATRASADO", Cancelado: "CANCELADO" };
+    try {
+      const updated = await api.updateFinance(item.id, { status: codes[status] });
+      setMoney((items) => items.map((x) => x.id === item.id ? mapFinance(updated) : x));
+      notify("Status financeiro atualizado");
+    } catch (e) { notify(e instanceof Error ? e.message : "Não foi possível atualizar o status"); }
+  };
+
   const result = useMemo(
     () =>
       [
@@ -457,8 +466,8 @@ export default function App() {
           {page === "Clientes" && <Clients clients={clients} projects={projects} />}
           {page === "Projetos" && <Projects projects={projects} clients={clients} />}
           {page === "Tarefas" && <Tasks tasks={tasks} onToggle={toggleTask} add={() => setModal("task")} />}
-          {page === "Financeiro" && <Finance money={money} clients={clients} />}
-          {page === "Despesas" && <Expenses money={money} add={() => setModal("expense")} />}
+          {page === "Financeiro" && <Finance money={money} clients={clients} onStatus={changeFinanceStatus} />}
+          {page === "Despesas" && <Expenses money={money} add={() => setModal("expense")} onStatus={changeFinanceStatus} />}
           {page === "Relatórios" && <Reports leads={leads} money={money} />}
           {page === "Configurações" && <SettingsPage notify={notify} user={user} logout={handleLogout} />}
         </section>
@@ -745,7 +754,7 @@ function Tasks({ tasks, onToggle, add }: { tasks: Task[]; onToggle: (t: Task) =>
     </>
   );
 }
-function Finance({ money, clients }: { money: Money[]; clients: Client[] }) {
+function Finance({ money, clients, onStatus }: { money: Money[]; clients: Client[]; onStatus: (item: Money, status: string) => void }) {
   const rec = money.filter((x) => x.kind === "receita");
   const exp = money.filter((x) => x.kind === "despesa");
   const paid = rec.filter((x) => x.status === "Pago").reduce((s, x) => s + x.value, 0);
@@ -759,22 +768,22 @@ function Finance({ money, clients }: { money: Money[]; clients: Client[] }) {
         <Metric name="Despesas pagas" value={brl(cost)} Icon={WalletCards} />
         <Metric name="Lucro realizado" value={brl(paid - cost)} Icon={TrendingUp} />
       </div>
-      <MoneyTable data={rec} />
+      <MoneyTable data={rec} onStatus={onStatus} />
     </>
   );
 }
-function Expenses({ money, add }: { money: Money[]; add: () => void }) {
+function Expenses({ money, add, onStatus }: { money: Money[]; add: () => void; onStatus: (item: Money, status: string) => void }) {
   const data = money.filter((x) => x.kind === "despesa");
   return (
     <>
       <Head k="FINANCEIRO" title="Despesas" sub="Custos operacionais e de projetos.">
         <Btn onClick={add}><Plus size={16} /> Nova despesa</Btn>
       </Head>
-      <MoneyTable data={data} />
+      <MoneyTable data={data} onStatus={onStatus} />
     </>
   );
 }
-function MoneyTable({ data }: { data: Money[] }) {
+function MoneyTable({ data, onStatus }: { data: Money[]; onStatus: (item: Money, status: string) => void }) {
   return (
     <article className="panel table">
       <div className="scroll">
@@ -785,7 +794,7 @@ function MoneyTable({ data }: { data: Money[] }) {
               <tr key={x.id}>
                 <td><strong>{x.name}</strong></td>
                 <td>{x.relation}</td>
-                <td><Badge s={x.status} /></td>
+                <td><select aria-label={`Status de ${x.name}`} value={x.status} onChange={(e) => onStatus(x, e.target.value)}>{["Pendente", "Pago", "Atrasado", "Cancelado"].map((s) => <option key={s}>{s}</option>)}</select></td>
                 <td><strong>{x.kind === "despesa" ? "−" : ""}{brl(x.value)}</strong></td>
               </tr>
             ))}
@@ -813,6 +822,7 @@ function Reports({ leads, money }: { leads: Lead[]; money: Money[] }) {
 
 function FollowUpCenter({ leads, rows, refresh, notify }: { leads: Lead[]; rows: import("./lib/api").ApiFollowUp[]; refresh: () => Promise<void>; notify: (s: string) => void }) {
   const [leadId, setLeadId] = useState(leads[0]?.id ?? ""); const [description, setDescription] = useState(""); const [dueAt, setDueAt] = useState(""); const [busy, setBusy] = useState(false);
+  useEffect(() => { if (!leadId && leads[0]) setLeadId(leads[0].id); }, [leadId, leads]);
   const act = async (id: string, status: "CONCLUIDO" | "CANCELADO") => { try { await api.updateFollowUp(id, { status }); await refresh(); } catch (e) { notify(e instanceof Error ? e.message : "Falha ao atualizar acompanhamento"); } };
   const submit = async (e: FormEvent) => { e.preventDefault(); if (busy) return; setBusy(true); try { await api.createFollowUp({ leadId, description, dueAt: new Date(dueAt).toISOString() }); setDescription(""); await refresh(); notify("Acompanhamento agendado"); } catch (e) { notify(e instanceof Error ? e.message : "Falha ao agendar"); } finally { setBusy(false); } };
   const pending = rows.filter((r) => r.status === "PENDENTE"); const overdue = pending.filter((r) => new Date(r.dueAt) < new Date());
@@ -821,6 +831,7 @@ function FollowUpCenter({ leads, rows, refresh, notify }: { leads: Lead[]; rows:
 
 function ProposalCenter({ leads, rows, refresh, notify }: { leads: Lead[]; rows: import("./lib/api").ApiProposal[]; refresh: () => Promise<void>; notify: (s: string) => void }) {
   const [leadId, setLeadId] = useState(leads[0]?.id ?? ""); const [title, setTitle] = useState(""); const [description, setDescription] = useState(""); const [value, setValue] = useState(""); const [busy, setBusy] = useState(false);
+  useEffect(() => { if (!leadId && leads[0]) setLeadId(leads[0].id); }, [leadId, leads]);
   const submit = async (e: FormEvent) => { e.preventDefault(); if (busy) return; setBusy(true); try { await api.createProposal(leadId, { title, description, items: [{ name: title, quantity: 1, unitPrice: Number(value) }], discount: 0 }); setTitle(""); setDescription(""); setValue(""); await refresh(); notify("Proposta criada"); } catch (e) { notify(e instanceof Error ? e.message : "Falha ao criar proposta"); } finally { setBusy(false); } };
   return <><Head k="COMERCIAL" title="Propostas comerciais" sub="Propostas versionadas e vinculadas às oportunidades." /><article className="panel form"><form className="userform" onSubmit={submit}><label>Lead<select value={leadId} onChange={(e) => setLeadId(e.target.value)} required>{leads.map((l) => <option key={l.id} value={l.id}>{l.company}</option>)}</select></label><label>Título do projeto<input value={title} onChange={(e) => setTitle(e.target.value)} required /></label><label>Descrição<input value={description} onChange={(e) => setDescription(e.target.value)} required /></label><label>Valor contratado (R$)<input type="number" min="0.01" step="0.01" value={value} onChange={(e) => setValue(e.target.value)} required /></label><Btn type="submit" disabled={busy || leads.length === 0}>{busy ? "Salvando…" : "Criar proposta"}</Btn></form></article><article className="panel table"><div className="scroll"><table><thead><tr><th>PROPOSTA</th><th>EMPRESA</th><th>STATUS</th><th>VERSÃO</th><th>VALOR</th></tr></thead><tbody>{rows.map((p) => <tr key={p.id}><td>{p.title}</td><td>{p.lead?.company}</td><td>{p.status}</td><td>v{p.version}</td><td>{brl(Number(p.total))}</td></tr>)}</tbody></table>{rows.length === 0 && <p className="note">Nenhuma proposta cadastrada.</p>}</div></article></>;
 }

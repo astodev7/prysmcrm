@@ -1469,6 +1469,27 @@ td > small, .entity small { font-size: 11px; }
 .authenticator-panel > p { color: var(--muted); font-size: 13px; margin: 8px 0 16px; }
 .authenticator-panel .userform { max-width: 560px; }
 .totp-secret { display: block; padding: 14px 16px; border-radius: 12px; background: #20150f; border: 1px dashed #aa8962; color: #f6e4c4; font-size: 17px; letter-spacing: .12em; text-align: center; overflow-wrap: anywhere; }
+
+/* Restore Prysm's original indigo/lavender surfaces while keeping the current layout. */
+:root { --bg:#0E0B1D; --side:#0E0B1D; --card:#2A1E4D; --card2:#3A3A52; --line:#5A3B8C; --text:#C9C2E3; --muted:#8B7CC7; --dim:#8B7CC7; --lime:#8B7CC7; --yellow:#8B7CC7; --red:#C9C2E3; }
+@layer base {
+  body { background:radial-gradient(ellipse at 12% 0%,rgba(90,59,140,.24),transparent 42%),radial-gradient(ellipse at 90% 78%,rgba(139,124,199,.12),transparent 36%),#0E0B1D; color:#C9C2E3; }
+  input,select,textarea { color:#C9C2E3; }
+}
+.shell > aside, main > header { background:rgba(14,11,29,.9); border-color:rgba(139,124,199,.30); }
+.metric,.panel,.cards article,.strip,.settings > nav,.modal,.kanban > section,.taskboard > section { background:linear-gradient(145deg,rgba(42,30,77,.88),rgba(14,11,29,.94)); border-color:rgba(139,124,199,.30); box-shadow:0 14px 36px rgba(14,11,29,.3),inset 0 1px rgba(201,194,227,.08); }
+.kanban article,.taskboard article { background:rgba(58,58,82,.64); border-color:rgba(139,124,199,.28); }
+.tools > div,.tools > button,.tools select,.form input,.form select,.modalform input,.modalform select,.quick input,.userform input,.userform select { background:rgba(14,11,29,.62); border-color:rgba(139,124,199,.35); color:#C9C2E3; }
+.shell aside nav button:hover,.shell aside nav button.active,.btn { background:#8B7CC7; color:#0E0B1D; }
+.btn.plain,.icon { background:rgba(90,59,140,.34); border-color:rgba(139,124,199,.4); color:#C9C2E3; }
+.login-shell { background:radial-gradient(ellipse at 50% 35%,rgba(90,59,140,.34),transparent 46%),#0E0B1D; }
+.login-card { background:rgba(42,30,77,.62); border-color:rgba(201,194,227,.28); }
+.totp-secret { background:rgba(14,11,29,.65); border-color:rgba(139,124,199,.55); color:#C9C2E3; }
+.strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); }
+.strip span { border-color:rgba(139,124,199,.25); }
+.activity-timeline { padding-left:20px; }
+.activity-timeline li { padding:12px 0; border-bottom:1px solid rgba(139,124,199,.22); }
+@media(max-width:650px){.strip{grid-template-columns:repeat(2,minmax(0,1fr));}}
 .field-hint { color: var(--muted); font-size: 12px; }
 .login-card { gap: 1rem; }
 .login-card input { min-height: 44px; }
