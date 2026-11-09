@@ -14,6 +14,7 @@ import { projectsRoutes } from "./modules/projects/projects.routes.js";
 import { tasksRoutes } from "./modules/tasks/tasks.routes.js";
 import { financeRoutes } from "./modules/finance/finance.routes.js";
 import { companyRoutes } from "./modules/company/company.routes.js";
+import { auditRoutes } from "./modules/audit/audit.routes.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -28,6 +29,20 @@ export async function buildApp() {
   await app.register(sensible);
   await app.register(authPlugin);
 
+  app.addHook("onResponse", async (request, reply) => {
+    if (!request.user?.sub || !["POST", "PUT", "PATCH", "DELETE"].includes(request.method) || reply.statusCode >= 400) return;
+    const parts = request.url.split("?")[0].split("/").filter(Boolean);
+    const entity = parts[0] ?? "unknown";
+    const entityId = parts[1] && parts[1] !== "summary" && parts[1] !== "pipeline" ? parts[1] : null;
+    try {
+      await import("./config/prisma.js").then(({ prisma }) => prisma.auditLog.create({
+        data: { actorId: request.user.sub, action: request.method, entity, entityId },
+      }));
+    } catch (error) {
+      app.log.error({ error, url: request.url }, "Falha ao registrar auditoria");
+    }
+  });
+
   // Health check
   app.get("/health", async () => ({ status: "ok", timestamp: new Date().toISOString() }));
 
@@ -40,6 +55,7 @@ export async function buildApp() {
   await app.register(tasksRoutes, { prefix: "/tasks" });
   await app.register(financeRoutes, { prefix: "/finance" });
   await app.register(companyRoutes, { prefix: "/company" });
+  await app.register(auditRoutes, { prefix: "/audit" });
 
   // Error handler global
   app.setErrorHandler((error: Error, _request, reply) => {

@@ -67,6 +67,7 @@ model User {
   password  String
   role      Role     @default(COMERCIAL)
   active    Boolean  @default(true)
+  authVersion Int    @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -194,4 +195,18 @@ model Finance {
   updatedAt DateTime @updatedAt
 
   @@map("finances")
+}
+
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  action    String
+  entity    String
+  entityId  String?
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([entity, entityId])
+  @@map("audit_logs")
 }

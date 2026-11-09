@@ -18,7 +18,7 @@ const updateClientSchema = createClientSchema.partial();
 export async function clientsRoutes(app: FastifyInstance) {
   app.get(
     "/",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","COMERCIAL","OPERACIONAL")] },
     async (request) => {
       const query = request.query as { search?: string };
 
@@ -49,7 +49,7 @@ export async function clientsRoutes(app: FastifyInstance) {
 
   app.get(
     "/:id",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","COMERCIAL","OPERACIONAL")] },
     async (request) => {
       const { id } = request.params as { id: string };
 
@@ -73,7 +73,7 @@ export async function clientsRoutes(app: FastifyInstance) {
 
   app.post(
     "/",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","COMERCIAL","OPERACIONAL")] },
     async (request, reply) => {
       const body = createClientSchema.parse(request.body);
 
@@ -87,7 +87,7 @@ export async function clientsRoutes(app: FastifyInstance) {
 
   app.put(
     "/:id",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","COMERCIAL","OPERACIONAL")] },
     async (request) => {
       const { id } = request.params as { id: string };
       const body = updateClientSchema.parse(request.body);
@@ -106,7 +106,7 @@ export async function clientsRoutes(app: FastifyInstance) {
 
   app.delete(
     "/:id",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","COMERCIAL","OPERACIONAL")] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
 

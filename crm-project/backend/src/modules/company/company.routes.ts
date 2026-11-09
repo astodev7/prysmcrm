@@ -17,7 +17,7 @@ export async function companyRoutes(app: FastifyInstance) {
   // Buscar dados da empresa (sempre pega o primeiro registro)
   app.get(
     "/",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN")] },
     async () => {
       const company = await prisma.company.findFirst();
       return company ?? null;

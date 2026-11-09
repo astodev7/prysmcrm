@@ -24,7 +24,7 @@ export async function financeRoutes(app: FastifyInstance) {
   // Listar lançamentos
   app.get(
     "/",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","FINANCEIRO")] },
     async (request) => {
       const query = request.query as {
         kind?: string;
@@ -49,7 +49,7 @@ export async function financeRoutes(app: FastifyInstance) {
   // Resumo financeiro (dashboard)
   app.get(
     "/summary",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","FINANCEIRO")] },
     async () => {
       const [receitas, despesas] = await Promise.all([
         prisma.finance.aggregate({
@@ -85,7 +85,7 @@ export async function financeRoutes(app: FastifyInstance) {
 
   app.get(
     "/:id",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","FINANCEIRO")] },
     async (request) => {
       const { id } = request.params as { id: string };
 
@@ -98,7 +98,7 @@ export async function financeRoutes(app: FastifyInstance) {
 
   app.post(
     "/",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","FINANCEIRO")] },
     async (request, reply) => {
       const body = createFinanceSchema.parse(request.body);
 
@@ -116,7 +116,7 @@ export async function financeRoutes(app: FastifyInstance) {
 
   app.put(
     "/:id",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","FINANCEIRO")] },
     async (request) => {
       const { id } = request.params as { id: string };
       const body = updateFinanceSchema.parse(request.body);
@@ -139,7 +139,7 @@ export async function financeRoutes(app: FastifyInstance) {
 
   app.delete(
     "/:id",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","FINANCEIRO")] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
 

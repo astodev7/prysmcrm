@@ -16,13 +16,8 @@ class ApiError extends Error {
   }
 }
 
-function getToken(): string | null {
-  return localStorage.getItem("crm_token");
-}
-
-export function setToken(token: string | null) {
-  if (token) localStorage.setItem("crm_token", token);
-  else localStorage.removeItem("crm_token");
+export function setToken(_token: string | null) {
+  localStorage.removeItem("crm_token");
 }
 
 export function getStoredUser(): AuthUser | null {
@@ -46,15 +41,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     "Content-Type": "application/json",
   };
 
-  if (auth) {
-    const token = getToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
+  void auth;
 
   const res = await fetch(`${API_URL}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    credentials: "include",
   });
 
   if (res.status === 204) return undefined as T;
@@ -177,13 +170,15 @@ export type ApiUser = {
 // ===== Auth =====
 export const api = {
   login: (email: string, password: string) =>
-    request<{ token: string; user: AuthUser }>("/auth/login", {
+    request<{ user: AuthUser }>("/auth/login", {
       method: "POST",
       body: { email, password },
       auth: false,
     }),
 
   me: () => request<AuthUser>("/auth/me"),
+  logout: () => request<void>("/auth/logout", { method: "POST" }),
+  changePassword: (currentPassword: string, newPassword: string) => request<{ message: string }>("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
 
   // Leads
   getLeads: (params?: { status?: string; search?: string }) => {

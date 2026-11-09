@@ -16,6 +16,7 @@ export type Lead = {
   company: string;
   contact: string;
   email: string;
+  phone: string;
   segment: string;
   source: string;
   status: Status;
@@ -25,6 +26,7 @@ export type Lead = {
   probability: number;
   next: string;
   date: string;
+  createdAt: string;
 };
 
 export type Client = {
@@ -61,6 +63,7 @@ export type Money = {
   status: string;
   kind: "receita" | "despesa";
   relation: string;
+  createdAt: string;
 };
 
 // Status maps
@@ -162,6 +165,7 @@ export function mapLead(l: ApiLead): Lead {
     company: l.company,
     contact: l.contact,
     email: l.email || "",
+    phone: l.phone || "",
     segment: l.segment || "",
     source: l.source || "",
     status: statusFromApi[l.status] || "Novo",
@@ -170,7 +174,8 @@ export function mapLead(l: ApiLead): Lead {
     value: Number(l.value),
     probability: l.probability,
     next: l.nextAction || "",
-    date: formatDate(l.nextContact),
+    date: l.nextContact ? new Date(l.nextContact).toISOString().slice(0, 10) : "",
+    createdAt: l.createdAt,
   };
 }
 
@@ -179,6 +184,8 @@ export function mapLeadToApi(lead: Partial<Lead> & { company?: string; contact?:
   if (lead.company !== undefined) data.company = lead.company;
   if (lead.contact !== undefined) data.contact = lead.contact;
   if (lead.email !== undefined) data.email = lead.email || null;
+  if (lead.phone !== undefined) data.phone = lead.phone || null;
+  if (lead.phone !== undefined) data.phone = lead.phone || null;
   if (lead.segment !== undefined) data.segment = lead.segment || null;
   if (lead.source !== undefined) data.source = lead.source || null;
   if (lead.status !== undefined) data.status = statusToApi[lead.status as Status];
@@ -186,6 +193,8 @@ export function mapLeadToApi(lead: Partial<Lead> & { company?: string; contact?:
   if (lead.probability !== undefined) data.probability = lead.probability;
   if (lead.next !== undefined) data.nextAction = lead.next || null;
   if (lead.ownerId !== undefined) data.ownerId = lead.ownerId || null;
+  if (lead.date !== undefined) data.nextContact = lead.date ? new Date(lead.date).toISOString() : null;
+  if (lead.date !== undefined) data.nextContact = lead.date ? new Date(lead.date).toISOString() : null;
   return data;
 }
 
@@ -238,6 +247,7 @@ export function mapFinance(f: ApiFinance): Money {
     status: moneyStatusFromApi[f.status] || f.status,
     kind: f.kind === "RECEITA" ? "receita" : "despesa",
     relation: f.relation || "",
+    createdAt: f.createdAt,
   };
 }
 

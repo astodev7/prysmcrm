@@ -32,7 +32,8 @@ npx prisma migrate dev --name init
 # 4. Popular com dados de exemplo
 npm run prisma:seed
 
-# 5. Subir o servidor
+# 5. Configure `BOOTSTRAP_ADMIN_SECRET` e crie a primeira conta em `/auth/register` usando essa chave.
+6. Subir o servidor
 npm run dev
 ```
 
@@ -49,12 +50,7 @@ API disponível em: `http://localhost:3333`
 | `FRONTEND_URL` | Não | URL do frontend para CORS |
 | `BCRYPT_SALT_ROUNDS` | Não | Rounds do bcrypt (padrão `12`) |
 
-## Usuários de seed
-
-| Email | Senha | Role |
-|-------|-------|------|
-| `rafael@nodulo.studio` | `123456` | ADMIN |
-| `bianca@nodulo.studio` | `123456` | COMERCIAL |
+O seed é opcional, só funciona em banco sem usuários e exige `SEED_PASSWORD` forte; nunca apaga tabelas existentes.
 
 ## Endpoints
 
@@ -65,7 +61,7 @@ API disponível em: `http://localhost:3333`
 | POST | `/auth/register` | ADMIN* | Registrar usuário |
 | GET | `/auth/me` | ✅ | Dados do usuário logado |
 
-\* O primeiro usuário pode ser criado sem auth (vira ADMIN automaticamente).
+\* A primeira conta exige `BOOTSTRAP_ADMIN_SECRET`; senhas precisam de 12 caracteres, maiúscula, minúscula, número e símbolo.
 
 ### Users (ADMIN)
 | Método | Rota | Descrição |
@@ -128,6 +124,11 @@ API disponível em: `http://localhost:3333`
 | GET | `/company` | Dados da empresa |
 | PUT | `/company` | Criar/atualizar (ADMIN) |
 
+### Auditoria (ADMIN)
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/audit` | Até 500 alterações recentes (ator, ação, entidade e registro) |
+
 ### Health
 | Método | Rota | Descrição |
 |--------|------|-----------|
@@ -135,11 +136,9 @@ API disponível em: `http://localhost:3333`
 
 ## Autenticação
 
-Todas as rotas protegidas exigem header:
+Sessões em cookie HttpOnly SameSite, validade de 15 minutos, logout com revogação. Login limita cinco falhas por IP a cada 15 minutos. Senhas novas exigem 12 caracteres com maiúscula, minúscula, número e símbolo.
 
-```
-Authorization: Bearer <token>
-```
+A sessão usa cookie HttpOnly, SameSite e expira em 15 minutos. Sair e trocar senha invalidam as sessões anteriores.
 
 Roles disponíveis: `ADMIN`, `COMERCIAL`, `FINANCEIRO`, `OPERACIONAL`.
 

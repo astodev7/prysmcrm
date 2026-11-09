@@ -62,6 +62,12 @@ type Page =
   | "Relatórios"
   | "Configurações";
 
+function exportCsv(filename: string, rows: (string | number)[][]) {
+  const csv = "\uFEFF" + rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a"); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url);
+}
+
 const brl = (n: number) =>
   new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -93,7 +99,7 @@ const nav: [Page, typeof LayoutDashboard][] = [
   ["Configurações", Settings],
 ];
 
-function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token: string) => void | Promise<void> }) {
+function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void | Promise<void> }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -105,7 +111,7 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token: string) => vo
     setLoading(true);
     try {
       const res = await api.login(email, password);
-      await onLogin(res.user, res.token);
+      await onLogin(res.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha no login");
     } finally {
@@ -165,6 +171,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    void api.logout().catch(() => undefined);
     setToken(null);
     setStoredUser(null);
     setUser(null);
@@ -178,12 +185,16 @@ export default function App() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
+      const role = user?.role;
+      const canSales = role === "ADMIN" || role === "COMERCIAL";
+      const canOperations = role === "ADMIN" || role === "OPERACIONAL";
+      const canFinance = role === "ADMIN" || role === "FINANCEIRO";
       const [leadsRes, clientsRes, projectsRes, tasksRes, financeRes] = await Promise.all([
-        api.getLeads(),
-        api.getClients(),
-        api.getProjects(),
-        api.getTasks(),
-        api.getFinance(),
+        canSales ? api.getLeads() : Promise.resolve([]),
+        canSales || canOperations ? api.getClients() : Promise.resolve([]),
+        canOperations ? api.getProjects() : Promise.resolve([]),
+        canSales || canOperations ? api.getTasks() : Promise.resolve([]),
+        canFinance ? api.getFinance() : Promise.resolve([]),
       ]);
       setLeads(leadsRes.map(mapLead));
       setClients(clientsRes.map(mapClient));
@@ -198,17 +209,24 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.role]);
 
-  const handleLogin = async (u: AuthUser, token: string) => {
-    setToken(token);
+  const handleLogin = async (u: AuthUser) => {
     setStoredUser(u);
     setUser(u);
-    await loadData();
+    const [l, c, p, t, f] = await Promise.all([
+      u.role === "ADMIN" || u.role === "COMERCIAL" ? api.getLeads() : Promise.resolve([]),
+      ["ADMIN", "COMERCIAL", "OPERACIONAL"].includes(u.role) ? api.getClients() : Promise.resolve([]),
+      ["ADMIN", "OPERACIONAL"].includes(u.role) ? api.getProjects() : Promise.resolve([]),
+      ["ADMIN", "COMERCIAL", "OPERACIONAL"].includes(u.role) ? api.getTasks() : Promise.resolve([]),
+      ["ADMIN", "FINANCEIRO"].includes(u.role) ? api.getFinance() : Promise.resolve([]),
+    ]);
+    setLeads(l.map(mapLead)); setClients(c.map(mapClient)); setProjects(p.map(mapProject)); setTasks(t.map(mapTask)); setMoney(f.map(mapFinance));
   };
 
   useEffect(() => {
     const init = async () => {
+      setToken(null); // remove any bearer token saved by the previous localStorage session
       const stored = getStoredUser();
       if (!stored) {
         setBooting(false);
@@ -345,7 +363,7 @@ export default function App() {
         </div>
         <label>OPERAÇÃO</label>
         <nav>
-          {nav.slice(0, 6).map(([n, I]) => (
+          {nav.filter(([n]) => { const allowed: Record<string, string[]> = { Leads: ["ADMIN", "COMERCIAL"], Pipeline: ["ADMIN", "COMERCIAL"], Clientes: ["ADMIN", "COMERCIAL", "OPERACIONAL"], Projetos: ["ADMIN", "OPERACIONAL"], Tarefas: ["ADMIN", "COMERCIAL", "OPERACIONAL"], Financeiro: ["ADMIN", "FINANCEIRO"], Despesas: ["ADMIN", "FINANCEIRO"], Configurações: ["ADMIN", "COMERCIAL", "FINANCEIRO", "OPERACIONAL"] }; return (allowed[n] ?? ["ADMIN"]).includes(user.role); }).slice(0, 6).map(([n, I]) => (
             <button key={n} className={page === n ? "active" : ""} onClick={() => { setPage(n); setMenu(false); }}>
               <I size={18} />
               {n}
@@ -355,7 +373,7 @@ export default function App() {
             </button>
           ))}
           <div className="nav-split" />
-          {nav.slice(6).map(([n, I]) => (
+          {nav.filter(([n]) => { const allowed: Record<string, string[]> = { Leads: ["ADMIN", "COMERCIAL"], Pipeline: ["ADMIN", "COMERCIAL"], Clientes: ["ADMIN", "COMERCIAL", "OPERACIONAL"], Projetos: ["ADMIN", "OPERACIONAL"], Tarefas: ["ADMIN", "COMERCIAL", "OPERACIONAL"], Financeiro: ["ADMIN", "FINANCEIRO"], Despesas: ["ADMIN", "FINANCEIRO"], Configurações: ["ADMIN", "COMERCIAL", "FINANCEIRO", "OPERACIONAL"] }; return (allowed[n] ?? ["ADMIN"]).includes(user.role); }).slice(6).map(([n, I]) => (
             <button key={n} className={page === n ? "active" : ""} onClick={() => { setPage(n); setMenu(false); }}>
               <I size={18} />
               {n}
@@ -404,7 +422,7 @@ export default function App() {
           {page === "Financeiro" && <Finance money={money} clients={clients} />}
           {page === "Despesas" && <Expenses money={money} add={() => setModal("expense")} />}
           {page === "Relatórios" && <Reports leads={leads} money={money} />}
-          {page === "Configurações" && <SettingsPage notify={notify} />}
+          {page === "Configurações" && <SettingsPage notify={notify} user={user} logout={handleLogout} />}
         </section>
       </main>
       {modal === "lead" && <LeadForm lead={editing} close={() => setModal(null)} save={saveLead} />}
@@ -463,15 +481,19 @@ function PanelHead({ title, sub }: { title: string; sub: string }) {
   );
 }
 function Dashboard({ leads, money, tasks, projects, go, userName }: { leads: Lead[]; money: Money[]; tasks: Task[]; projects: Project[]; go: (p: Page) => void; userName: string }) {
-  const rec = money.filter((x) => x.kind === "receita" && x.status === "Pago").reduce((s, x) => s + x.value, 0);
-  const exp = money.filter((x) => x.kind === "despesa" && x.status === "Pago").reduce((s, x) => s + x.value, 0);
-  const pipe = leads.filter((x) => !["Ganho", "Perdido"].includes(x.status)).reduce((s, x) => s + x.value, 0);
-  const conv = leads.length ? Math.round((leads.filter((x) => x.status === "Ganho").length / leads.length) * 100) : 0;
+  const [period, setPeriod] = useState<"30 dias" | "Todo período">("30 dias");
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const periodLeads = period === "30 dias" ? leads.filter((x) => !x.createdAt || new Date(x.createdAt).getTime() >= cutoff) : leads;
+  const periodMoney = period === "30 dias" ? money.filter((x) => !x.createdAt || new Date(x.createdAt).getTime() >= cutoff) : money;
+  const rec = periodMoney.filter((x) => x.kind === "receita" && x.status === "Pago").reduce((s, x) => s + x.value, 0);
+  const exp = periodMoney.filter((x) => x.kind === "despesa" && x.status === "Pago").reduce((s, x) => s + x.value, 0);
+  const pipe = periodLeads.filter((x) => !["Ganho", "Perdido"].includes(x.status)).reduce((s, x) => s + x.value, 0);
+  const conv = periodLeads.length ? Math.round((periodLeads.filter((x) => x.status === "Ganho").length / periodLeads.length) * 100) : 0;
   return (
     <>
       <Head title={`Bom dia, ${userName}`} sub="Aqui está o pulso da sua operação hoje.">
-        <Btn plain><CalendarDays size={15} /> Últimos 30 dias</Btn>
-        <Btn plain><Download size={15} /> Exportar</Btn>
+        <Btn plain onClick={() => setPeriod(period === "30 dias" ? "Todo período" : "30 dias")}><CalendarDays size={15} /> {period}</Btn>
+        <Btn plain onClick={() => exportCsv("leads.csv", [["Empresa", "Contato", "E-mail", "Telefone", "Status", "Valor", "Responsável"], ...leads.map((x) => [x.company, x.contact, x.email, x.phone, x.status, x.value, x.owner])])}><Download size={15} /> Exportar leads</Btn>
       </Head>
       <div className="metrics">
         <Metric name="Pipeline ativo" value={brl(pipe)} Icon={Target} />
@@ -499,10 +521,10 @@ function Dashboard({ leads, money, tasks, projects, go, userName }: { leads: Lea
           </svg>
         </article>
         <article className="panel funnel">
-          <PanelHead title="Funil de vendas" sub={`${leads.length} oportunidades no período`} />
+          <PanelHead title="Funil de vendas" sub={`${periodLeads.length} oportunidades no período`} />
           {["Novo", "Interessado", "Proposta enviada", "Em negociação", "Ganho"].map((s, i) => (
             <div key={s}>
-              <span>{s}<b>{i === 0 ? leads.length : leads.filter((x) => x.status === s).length}</b></span>
+              <span>{s}<b>{i === 0 ? periodLeads.length : periodLeads.filter((x) => x.status === s).length}</b></span>
               <i><b style={{ width: `${100 - i * 18}%` }} /></i>
             </div>
           ))}
@@ -545,7 +567,8 @@ function Clock() {
 function Leads({ leads, edit, add, remove }: { leads: Lead[]; move: (id: string, status: Status) => void; edit: (l: Lead) => void; add: () => void; remove: (l: Lead) => void }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("Todos");
-  const filtered = leads.filter((x) => (status === "Todos" || x.status === status) && (x.company + x.contact).toLowerCase().includes(q.toLowerCase()));
+  const [source, setSource] = useState("");
+  const filtered = leads.filter((x) => (status === "Todos" || x.status === status) && (!source || x.source === source) && (x.company + x.contact).toLowerCase().includes(q.toLowerCase()));
   return (
     <>
       <Head k="COMERCIAL" title="Leads" sub={`${leads.length} oportunidades registradas na base.`}>
@@ -558,7 +581,7 @@ function Leads({ leads, edit, add, remove }: { leads: Lead[]; move: (id: string,
             <option>Todos</option>
             {stages.map((x) => <option key={x}>{x}</option>)}
           </select>
-          <button type="button"><Filter size={14} /> Mais filtros</button>
+          <select value={source} onChange={(e) => setSource(e.target.value)} aria-label="Filtrar por origem"><option value="">Todas as origens</option>{[...new Set(leads.map((x) => x.source).filter(Boolean))].map((item) => <option key={item}>{item}</option>)}</select>
         </div>
         <Table leads={filtered} edit={edit} remove={remove} />
       </article>
@@ -765,6 +788,7 @@ function LeadForm({ lead, close, save }: { lead: Lead | null; close: () => void;
       company: String(d.get("company")),
       contact: String(d.get("contact")),
       email: String(d.get("email")),
+      phone: String(d.get("phone")),
       segment: String(d.get("segment")),
       source: String(d.get("source")),
       status: String(d.get("status")) as Status,
@@ -772,15 +796,17 @@ function LeadForm({ lead, close, save }: { lead: Lead | null; close: () => void;
       value: Number(d.get("value")),
       probability: Number(d.get("probability")),
       next: String(d.get("next")),
-      date: lead?.date || "",
+      date: String(d.get("date") || ""),
+      createdAt: lead?.createdAt || new Date().toISOString(),
     });
   };
   return (
     <Modal title={lead ? "Editar lead" : "Novo lead"} sub="Dados comerciais conectados ao pipeline." close={close}>
       <form onSubmit={submit} className="modalform">
-        {[["company", "Empresa", lead?.company], ["contact", "Responsável", lead?.contact], ["email", "E-mail", lead?.email], ["segment", "Segmento", lead?.segment], ["value", "Valor estimado", lead?.value], ["probability", "Probabilidade (%)", lead?.probability], ["next", "Próxima ação", lead?.next]].map(([n, l, v]) => (
-          <label key={String(n)}>{l}<input name={String(n)} required defaultValue={v ?? ""} /></label>
+        {[ ["company", "Empresa", lead?.company], ["contact", "Responsável", lead?.contact], ["email", "E-mail", lead?.email], ["phone", "Telefone", lead?.phone], ["segment", "Segmento", lead?.segment], ["value", "Valor estimado", lead?.value ?? 0], ["probability", "Probabilidade (%)", lead?.probability ?? 0], ["next", "Próxima ação", lead?.next]].map(([n, l, v]) => (
+          <label key={String(n)}>{l}<input name={String(n)} required={n === "company" || n === "contact"} type={n === "value" ? "number" : n === "probability" ? "number" : "text"} min={n === "value" || n === "probability" ? 0 : undefined} max={n === "probability" ? 100 : undefined} step={n === "value" ? "0.01" : "1"} defaultValue={v ?? ""} /></label>
         ))}
+        <label>Próximo contato<input name="date" type="date" defaultValue={lead?.date || ""} /></label>
         <label>Origem
           <select name="source" defaultValue={lead?.source || "Outros"}>
             {["Google Maps", "Instagram", "Indicação", "WhatsApp", "Prospecção", "Outros"].map((x) => <option key={x}>{x}</option>)}
@@ -815,17 +841,11 @@ function QuickForm({ type, close, save }: { type: "task" | "expense"; close: () 
     </Modal>
   );
 }
-function SettingsPage({ notify }: { notify: (s: string) => void }) {
-  const tabs = [
-    "Dados da empresa",
-    "Usuários e permissões",
-    "Status do pipeline",
-    "Categorias financeiras",
-    "Pacotes de serviços",
-    "Notificações",
-  ] as const;
-  const icons = [UserRound, UsersRound, KanbanSquare, WalletCards, BriefcaseBusiness, Bell];
-  const [tab, setTab] = useState<(typeof tabs)[number]>("Dados da empresa");
+function SettingsPage({ notify, user, logout }: { notify: (s: string) => void; user: AuthUser; logout: () => void }) {
+  const adminTabs = ["Dados da empresa", "Usuários e permissões", "Status do pipeline", "Categorias financeiras", "Pacotes de serviços", "Notificações"] as const;
+  const tabs = user.role === "ADMIN" ? [...adminTabs, "Segurança"] : ["Segurança"] as const;
+  const icons: Record<string, typeof UserRound> = { "Dados da empresa": UserRound, "Usuários e permissões": UsersRound, "Status do pipeline": KanbanSquare, "Categorias financeiras": WalletCards, "Pacotes de serviços": BriefcaseBusiness, Notificações: Bell, Segurança: Settings };
+  const [tab, setTab] = useState<string>(user.role === "ADMIN" ? "Dados da empresa" : "Segurança");
 
   return (
     <>
@@ -833,7 +853,7 @@ function SettingsPage({ notify }: { notify: (s: string) => void }) {
       <div className="settings">
         <nav>
           {tabs.map((s, i) => {
-            const I = icons[i];
+            const I = icons[s];
             return (
               <button
                 className={tab === s ? "active" : ""}
@@ -867,10 +887,33 @@ function SettingsPage({ notify }: { notify: (s: string) => void }) {
             />
           )}
           {tab === "Notificações" && <NotifySettings />}
+          {tab === "Segurança" && <PasswordPanel notify={notify} logout={logout} />}
         </article>
       </div>
     </>
   );
+}
+
+
+function PasswordPanel({ notify, logout }: { notify: (s: string) => void; logout: () => void }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [saving, setSaving] = useState(false);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (next !== confirm) { notify("As novas senhas não coincidem"); return; }
+    setSaving(true);
+    try { await api.changePassword(current, next); notify("Senha alterada. Entre novamente."); logout(); }
+    catch (err) { notify(err instanceof Error ? err.message : "Não foi possível alterar a senha"); }
+    finally { setSaving(false); }
+  };
+  return <form className="userform" onSubmit={submit}><h2>Senha e sessão</h2><p>Use pelo menos 12 caracteres com maiúscula, minúscula, número e símbolo.</p>
+    <label>Senha atual<input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required /></label>
+    <label>Nova senha<input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} minLength={12} required /></label>
+    <label>Confirme a nova senha<input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} minLength={12} required /></label>
+    <Btn type="submit">{saving ? "Salvando..." : "Alterar senha"}</Btn>
+  </form>;
 }
 
 function CompanyForm({ notify }: { notify: (s: string) => void }) {

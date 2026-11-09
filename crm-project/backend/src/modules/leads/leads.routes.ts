@@ -36,7 +36,7 @@ export async function leadsRoutes(app: FastifyInstance) {
   // Listar leads (com filtros)
   app.get(
     "/",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","COMERCIAL")] },
     async (request) => {
       const query = request.query as {
         status?: string;
@@ -44,7 +44,7 @@ export async function leadsRoutes(app: FastifyInstance) {
         ownerId?: string;
       };
 
-      const where: Record<string, unknown> = {};
+      const where: Record<string, unknown> = request.user.role === "ADMIN" ? {} : { ownerId: request.user.sub };
 
       if (query.status) where.status = query.status;
       if (query.ownerId) where.ownerId = query.ownerId;
@@ -75,7 +75,7 @@ export async function leadsRoutes(app: FastifyInstance) {
   // Pipeline summary (contagem por status) — precisa vir ANTES de /:id
   app.get(
     "/pipeline/summary",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","COMERCIAL")] },
     async () => {
       const groups = await prisma.lead.groupBy({
         by: ["status"],
@@ -94,12 +94,12 @@ export async function leadsRoutes(app: FastifyInstance) {
   // Buscar lead por ID
   app.get(
     "/:id",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","COMERCIAL")] },
     async (request) => {
       const { id } = request.params as { id: string };
 
-      const lead = await prisma.lead.findUnique({
-        where: { id },
+      const lead = await prisma.lead.findFirst({
+        where: { id, ...(request.user.role === "ADMIN" ? {} : { ownerId: request.user.sub }) },
         include: {
           owner: { select: { id: true, name: true } },
           client: true,
@@ -115,7 +115,7 @@ export async function leadsRoutes(app: FastifyInstance) {
   // Criar lead
   app.post(
     "/",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","COMERCIAL")] },
     async (request, reply) => {
       const body = createLeadSchema.parse(request.body);
 
@@ -138,11 +138,13 @@ export async function leadsRoutes(app: FastifyInstance) {
   // Atualizar lead
   app.put(
     "/:id",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","COMERCIAL")] },
     async (request) => {
       const { id } = request.params as { id: string };
       const body = updateLeadSchema.parse(request.body);
 
+      const existing = await prisma.lead.findFirst({ where: { id, ...(request.user.role === "ADMIN" ? {} : { ownerId: request.user.sub }) } });
+      if (!existing) throw new AppError("Lead não encontrado", 404);
       try {
         const lead = await prisma.lead.update({
           where: { id },
@@ -182,10 +184,12 @@ export async function leadsRoutes(app: FastifyInstance) {
   // Deletar lead
   app.delete(
     "/:id",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","COMERCIAL")] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
 
+      const existing = await prisma.lead.findFirst({ where: { id, ...(request.user.role === "ADMIN" ? {} : { ownerId: request.user.sub }) } });
+      if (!existing) throw new AppError("Lead não encontrado", 404);
       try {
         await prisma.lead.delete({ where: { id } });
         return reply.status(204).send();

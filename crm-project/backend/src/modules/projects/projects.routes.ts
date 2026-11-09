@@ -29,7 +29,7 @@ const updateProjectSchema = createProjectSchema.partial().omit({ clientId: true 
 export async function projectsRoutes(app: FastifyInstance) {
   app.get(
     "/",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","OPERACIONAL")] },
     async (request) => {
       const query = request.query as { status?: string; clientId?: string; search?: string };
 
@@ -58,7 +58,7 @@ export async function projectsRoutes(app: FastifyInstance) {
 
   app.get(
     "/:id",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","OPERACIONAL")] },
     async (request) => {
       const { id } = request.params as { id: string };
 
@@ -78,7 +78,7 @@ export async function projectsRoutes(app: FastifyInstance) {
 
   app.post(
     "/",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","OPERACIONAL")] },
     async (request, reply) => {
       const body = createProjectSchema.parse(request.body);
 
@@ -101,7 +101,7 @@ export async function projectsRoutes(app: FastifyInstance) {
 
   app.put(
     "/:id",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","OPERACIONAL")] },
     async (request) => {
       const { id } = request.params as { id: string };
       const body = updateProjectSchema.parse(request.body);
@@ -126,7 +126,7 @@ export async function projectsRoutes(app: FastifyInstance) {
 
   app.delete(
     "/:id",
-    { onRequest: [app.authenticate] },
+    { onRequest: [app.authorize("ADMIN","OPERACIONAL")] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
 

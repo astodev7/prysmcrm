@@ -6,16 +6,14 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Seeding database...");
 
-  // Limpa dados existentes (ordem importa por causa das FKs)
-  await prisma.finance.deleteMany();
-  await prisma.task.deleteMany();
-  await prisma.project.deleteMany();
-  await prisma.client.deleteMany();
-  await prisma.lead.deleteMany();
-  await prisma.company.deleteMany();
-  await prisma.user.deleteMany();
-
-  const password = await bcrypt.hash("123456", 12);
+  if (await prisma.user.count()) {
+    throw new Error("Seed cancelado: o banco já contém usuários. O seed só deve ser usado em um banco vazio.");
+  }
+  const passwordText = process.env.SEED_PASSWORD ?? "";
+  if (passwordText.length < 12 || !/[a-z]/.test(passwordText) || !/[A-Z]/.test(passwordText) || !/[0-9]/.test(passwordText) || !/[^A-Za-z0-9]/.test(passwordText)) {
+    throw new Error("Defina SEED_PASSWORD com 12+ caracteres, maiúscula, minúscula, número e símbolo.");
+  }
+  const password = await bcrypt.hash(passwordText, 12);
 
   const admin = await prisma.user.create({
     data: {

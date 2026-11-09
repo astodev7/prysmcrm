@@ -19,7 +19,8 @@ const envSchema = z.object({
     z.string().default("http://localhost:5173"),
   ),
   DATABASE_URL: z.string().min(1),
-  JWT_SECRET: z.string().min(16),
+  JWT_SECRET: z.string().min(32),
+  BOOTSTRAP_ADMIN_SECRET: z.preprocess(emptyToUndefined, z.string().min(32).optional()),
   JWT_EXPIRES_IN: z.preprocess(emptyToUndefined, z.string().default("7d")),
   BCRYPT_SALT_ROUNDS: z.preprocess(
     emptyToUndefined,

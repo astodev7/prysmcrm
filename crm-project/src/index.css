@@ -1,14 +1,14 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 :root {
-  --bg: #0a0b09;
-  --side: #0d0e0c;
-  --card: #11130f;
-  --card2: #171915;
-  --line: #242720;
-  --text: #f3f5ef;
-  --muted: #8d9388;
-  --dim: #5f655b;
+  --bg: #1a100b;
+  --side: #24170f;
+  --card: #33261d;
+  --card2: #3a2b20;
+  --line: #665342;
+  --text: #f3eadc;
+  --muted: #c5b6a2;
+  --dim: #95836f;
   --lime: #a8ff3e;
   --red: #ff6b62;
   --yellow: #e7bb5a;
@@ -1375,4 +1375,59 @@ td:last-child button {
 .head p,
 .panelhead p {
   font-size: 13px;
+}
+
+
+/* Warm glass CRM shell inspired by the supplied studio references. */
+@layer base {
+  body { background: radial-gradient(ellipse at 12% 8%, #633318 0, transparent 38%), radial-gradient(ellipse at 88% 65%, #3d291b 0, transparent 42%), var(--bg); color: var(--text); }
+}
+.shell > aside {
+  inset: 14px 7.5% auto; width: auto; min-height: 68px; height: auto; padding: 8px 14px;
+  display: flex; flex-direction: row; align-items: center; gap: 18px; border: 1px solid #86705a;
+  border-radius: 28px; background: #21150fe8; box-shadow: 0 12px 36px #10090499; backdrop-filter: blur(18px);
+}
+.brand { flex: 0 0 auto; padding: 0 4px; }
+.brand > b, .letter { background: #f0e6d7; color: #24170f; }
+.brand span strong { letter-spacing: -.03em; }
+.shell aside > label, .goal, .nav-split { display: none; }
+.shell aside nav { display: flex; flex: 1; justify-content: center; gap: 3px; overflow-x: auto; }
+.shell aside nav button { width: auto; height: 42px; white-space: nowrap; padding: 0 12px; border-radius: 24px; color: var(--muted); font-size: 12px; }
+.shell aside nav button:hover, .shell aside nav button.active { color: #22170f; background: #f1e7d8; }
+.shell aside nav button.active svg { color: #261810; }
+.shell aside nav button.active:before { display: none; }
+.shell aside nav button em { background: #e7bb5a; color: #25170e; }
+.shell > main { margin-left: 0; padding-top: 92px; }
+main > header { margin: 0 7.5%; border: 1px solid #5d4937; border-radius: 20px; background: #271a12d9; }
+.content { max-width: 1600px; padding: 22px 7.5% 54px; }
+.metric, .panel, .cards article, .strip { border-color: #76624e; border-radius: 18px; background: linear-gradient(145deg,#594633a6,#302219e6); box-shadow: 0 8px 22px #130c0770; }
+.metric { padding: 20px; }
+.metric > strong { font-size: 30px; }
+.panelhead { padding: 20px; }
+.btn { border-radius: 18px; background: #f0e6d7; color: #25180f; }
+.btn.plain { background: #4b3828; border-color: #75604a; color: var(--text); }
+.head h1 { font-size: clamp(30px, 3vw, 44px); }
+.head label { color: var(--yellow); }
+.tools > div, .tools > button, .tools select, .form input, .form select, .modalform input, .modalform select, .quick input { background: #493727; border-color: #75604a; color: var(--text); }
+.kanban > section, .taskboard > section { background: #281b13b8; border-color: #66513d; border-radius: 16px; }
+.kanban article, .taskboard article { background: #443222; border-color: #715b43; border-radius: 12px; }
+.modal { background: #302117; border-color: #79624b; border-radius: 18px; }
+.icon { border-color: #715b43; color: var(--text); background: #443222; }
+.toast { background: #443222; border-color: #80684f; }
+@media (max-width: 1000px) {
+ .shell > aside { transform: none; inset: 8px 2%; min-height: 58px; padding: 7px 10px; }
+ .shell aside nav { justify-content: flex-start; }
+ .shell > aside.open { transform: none; }
+ .shell > main { padding-top: 78px; }
+ main > header { margin-inline: 2%; }
+ .content { padding-inline: 2%; }
+ .shade { display: none; }
+}
+@media (max-width: 650px) {
+ .shell > aside { overflow: hidden; }
+ .shell > aside .brand { display: none; }
+ .shell aside nav button { padding: 0 9px; font-size: 11px; }
+ .shell > main { padding-top: 70px; }
+ main > header { margin-inline: 2%; padding-inline: 9px; }
+ .content { padding: 18px 3% 36px; }
 }
