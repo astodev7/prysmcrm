@@ -268,6 +268,8 @@ export const api = {
 
   // Users
   getUsers: () => request<ApiUser[]>("/users"),
+  createUser: (data: { name: string; email: string; password: string; role: string }) =>
+    request<ApiUser>("/users", { method: "POST", body: data }),
 };
 
 export { ApiError };
