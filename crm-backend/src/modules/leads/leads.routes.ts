@@ -130,6 +130,7 @@ export async function leadsRoutes(app: FastifyInstance) {
           owner: { select: { id: true, name: true } },
         },
       });
+      await prisma.leadActivity.create({ data: { leadId: lead.id, actorId: request.user.sub, type: "LEAD_CRIADO", content: "Lead criado" } });
 
       return reply.status(201).send({ ...lead, value: Number(lead.value) });
     },
@@ -145,8 +146,8 @@ export async function leadsRoutes(app: FastifyInstance) {
 
       const existing = await prisma.lead.findFirst({ where: { id, ...(request.user.role === "ADMIN" ? {} : { ownerId: request.user.sub }) } });
       if (!existing) throw new AppError("Lead não encontrado", 404);
-      try {
-        const lead = await prisma.lead.update({
+      const lead = await prisma.$transaction(async (tx) => {
+        const updatedLead = await tx.lead.update({
           where: { id },
           data: {
             ...body,
@@ -156,29 +157,46 @@ export async function leadsRoutes(app: FastifyInstance) {
             owner: { select: { id: true, name: true } },
           },
         });
+        if (body.status && body.status !== existing.status) await tx.leadActivity.create({ data: { leadId: id, actorId: request.user.sub, type: "STATUS_ALTERADO", content: `Status alterado de ${existing.status} para ${body.status}` } });
+        if (body.ownerId && body.ownerId !== existing.ownerId) await tx.leadActivity.create({ data: { leadId: id, actorId: request.user.sub, type: "RESPONSAVEL_ALTERADO", content: "Responsável do lead alterado" } });
 
-        // Se virou GANHO e ainda não tem cliente, cria automaticamente
+        // Closing a lead is atomic: preserve one client, one sale, and one
+        // initial receivable even if the status update is retried.
         if (body.status === "GANHO") {
-          const existingClient = await prisma.client.findUnique({ where: { leadId: id } });
-          if (!existingClient) {
-            await prisma.client.create({
+          let client = await tx.client.findUnique({ where: { leadId: id } });
+          if (!client) {
+            client = await tx.client.create({
               data: {
-                company: lead.company,
-                contact: lead.contact,
-                email: lead.email,
-                phone: lead.phone,
-                value: lead.value,
-                leadId: lead.id,
-                ownerId: lead.ownerId,
+                company: updatedLead.company,
+                contact: updatedLead.contact,
+                email: updatedLead.email,
+                phone: updatedLead.phone,
+                value: updatedLead.value,
+                leadId: updatedLead.id,
               },
             });
           }
+          let sale = await tx.closedSale.findUnique({ where: { leadId: id } });
+          if (!sale) {
+            sale = await tx.closedSale.create({ data: { leadId: id, clientId: client.id, contractAmount: updatedLead.value } });
+            if (Number(updatedLead.value) > 0) {
+              await tx.finance.create({
+                data: {
+                  name: `Contrato — ${updatedLead.company}`,
+                  value: updatedLead.value,
+                  kind: "RECEITA",
+                  status: "PENDENTE",
+                  relation: client.company,
+                  category: "Contrato",
+                  saleId: sale.id,
+                },
+              });
+            }
+          }
         }
-
-        return { ...lead, value: Number(lead.value) };
-      } catch {
-        throw new AppError("Lead não encontrado", 404);
-      }
+        return updatedLead;
+      });
+      return { ...lead, value: Number(lead.value) };
     },
   );
 
@@ -192,7 +210,10 @@ export async function leadsRoutes(app: FastifyInstance) {
       const existing = await prisma.lead.findFirst({ where: { id, ...(request.user.role === "ADMIN" ? {} : { ownerId: request.user.sub }) } });
       if (!existing) throw new AppError("Lead não encontrado", 404);
       try {
-        await prisma.lead.delete({ where: { id } });
+        await prisma.$transaction(async (tx) => {
+          await tx.client.updateMany({ where: { leadId: id }, data: { leadId: null } });
+          await tx.lead.delete({ where: { id } });
+        });
         return reply.status(204).send();
       } catch {
         throw new AppError("Lead não encontrado", 404);

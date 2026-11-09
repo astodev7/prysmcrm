@@ -1,0 +1,14 @@
+CREATE TYPE "FollowUpStatus" AS ENUM ('PENDENTE','CONCLUIDO','CANCELADO');
+CREATE TYPE "ProposalStatus" AS ENUM ('RASCUNHO','ENVIADA','NEGOCIACAO','APROVADA','RECUSADA','EXPIRADA');
+CREATE TABLE "lead_activities" ("id" TEXT NOT NULL,"leadId" TEXT NOT NULL,"actorId" TEXT NOT NULL,"type" TEXT NOT NULL,"content" TEXT NOT NULL,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "lead_activities_pkey" PRIMARY KEY ("id"));
+CREATE INDEX "lead_activities_leadId_createdAt_idx" ON "lead_activities"("leadId","createdAt");
+ALTER TABLE "lead_activities" ADD CONSTRAINT "lead_activities_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "leads"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE TABLE "follow_ups" ("id" TEXT NOT NULL,"leadId" TEXT NOT NULL,"ownerId" TEXT NOT NULL,"description" TEXT NOT NULL,"dueAt" TIMESTAMP(3) NOT NULL,"status" "FollowUpStatus" NOT NULL DEFAULT 'PENDENTE',"completedAt" TIMESTAMP(3),"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "follow_ups_pkey" PRIMARY KEY ("id"));
+CREATE INDEX "follow_ups_ownerId_status_dueAt_idx" ON "follow_ups"("ownerId","status","dueAt");
+ALTER TABLE "follow_ups" ADD CONSTRAINT "follow_ups_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "leads"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE TABLE "proposals" ("id" TEXT NOT NULL,"leadId" TEXT NOT NULL,"title" TEXT NOT NULL,"packageName" TEXT,"description" TEXT NOT NULL,"items" JSONB NOT NULL,"discount" DECIMAL(12,2) NOT NULL DEFAULT 0,"total" DECIMAL(12,2) NOT NULL,"terms" TEXT,"deadline" TIMESTAMP(3),"status" "ProposalStatus" NOT NULL DEFAULT 'RASCUNHO',"version" INTEGER NOT NULL DEFAULT 1,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP(3) NOT NULL,CONSTRAINT "proposals_pkey" PRIMARY KEY ("id"));
+CREATE INDEX "proposals_leadId_status_idx" ON "proposals"("leadId","status");
+ALTER TABLE "proposals" ADD CONSTRAINT "proposals_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "leads"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE TABLE "proposal_versions" ("id" TEXT NOT NULL,"proposalId" TEXT NOT NULL,"version" INTEGER NOT NULL,"snapshot" JSONB NOT NULL,"actorId" TEXT NOT NULL,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "proposal_versions_pkey" PRIMARY KEY ("id"));
+CREATE UNIQUE INDEX "proposal_versions_proposalId_version_key" ON "proposal_versions"("proposalId","version");
+ALTER TABLE "proposal_versions" ADD CONSTRAINT "proposal_versions_proposalId_fkey" FOREIGN KEY ("proposalId") REFERENCES "proposals"("id") ON DELETE CASCADE ON UPDATE CASCADE;

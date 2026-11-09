@@ -15,14 +15,7 @@ import { tasksRoutes } from "./modules/tasks/tasks.routes.js";
 import { financeRoutes } from "./modules/finance/finance.routes.js";
 import { companyRoutes } from "./modules/company/company.routes.js";
 import { auditRoutes } from "./modules/audit/audit.routes.js";
-
-function redactAuditValues(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(redactAuditValues);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value).map(([key, item]) =>
-    [/password|secret|token|authenticator|bootstrapkey|code/i.test(key) ? "[redigido]" : key, /password|secret|token|authenticator|bootstrapkey|code/i.test(key) ? "[redigido]" : redactAuditValues(item)],
-  ));
-}
+import { commercialRoutes } from "./modules/commercial/commercial.routes.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -42,10 +35,9 @@ export async function buildApp() {
     const parts = request.url.split("?")[0].split("/").filter(Boolean);
     const entity = parts[0] ?? "unknown";
     const entityId = parts[1] && parts[1] !== "summary" && parts[1] !== "pipeline" ? parts[1] : null;
-    const details = request.body && entity !== "auth" ? redactAuditValues(request.body) : undefined;
     try {
       await import("./config/prisma.js").then(({ prisma }) => prisma.auditLog.create({
-        data: { actorId: request.user.sub, action: request.method, entity, entityId, details: details as object | undefined },
+        data: { actorId: request.user.sub, action: request.method, entity, entityId },
       }));
     } catch (error) {
       app.log.error({ error, url: request.url }, "Falha ao registrar auditoria");
@@ -65,6 +57,7 @@ export async function buildApp() {
   await app.register(financeRoutes, { prefix: "/finance" });
   await app.register(companyRoutes, { prefix: "/company" });
   await app.register(auditRoutes, { prefix: "/audit" });
+  await app.register(commercialRoutes, { prefix: "/commercial" });
 
   // Error handler global
   app.setErrorHandler((error: Error, _request, reply) => {

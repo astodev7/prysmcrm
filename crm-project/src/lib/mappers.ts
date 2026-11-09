@@ -64,6 +64,8 @@ export type Money = {
   kind: "receita" | "despesa";
   relation: string;
   createdAt: string;
+  dueDate?: string | null;
+  paidAt?: string | null;
 };
 
 // Status maps
@@ -248,6 +250,8 @@ export function mapFinance(f: ApiFinance): Money {
     kind: f.kind === "RECEITA" ? "receita" : "despesa",
     relation: f.relation || "",
     createdAt: f.createdAt,
+    dueDate: f.dueDate,
+    paidAt: f.paidAt,
   };
 }
 

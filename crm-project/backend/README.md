@@ -18,25 +18,13 @@ API REST completa para o CRM (Leads, Pipeline, Clientes, Projetos, Tarefas, Fina
 
 ## Setup rápido
 
-```bash
-# 1. Instalar dependências
-npm install
+1. Instale as dependências e copie `.env.example` para `.env`.
+2. Configure `DATABASE_URL`, `JWT_SECRET` (32+ caracteres), `BOOTSTRAP_ADMIN_SECRET` e `TOTP_ENCRYPTION_KEY` (chave separada de 32+ caracteres).
+3. Aplique as migrações com `npx prisma migrate deploy`.
+4. Crie a primeira conta em `/auth/register` usando `BOOTSTRAP_ADMIN_SECRET`.
+5. Inicie a API com `npm run dev`.
 
-# 2. Configurar ambiente
-cp .env.example .env
-# Edite o .env com sua DATABASE_URL e JWT_SECRET
-
-# 3. Criar o banco e rodar migrations
-npx prisma migrate dev --name init
-
-# 4. Popular com dados de exemplo
-npm run prisma:seed
-
-# 5. Configure `BOOTSTRAP_ADMIN_SECRET` e crie a primeira conta em `/auth/register` usando essa chave.
-6. Subir o servidor
-npm run dev
-```
-
+O seed de demonstração só roda em banco sem usuários e exige `SEED_PASSWORD` forte; ele não apaga tabelas existentes.
 API disponível em: `http://localhost:3333`
 
 ## Variáveis de ambiente
@@ -135,6 +123,8 @@ O seed é opcional, só funciona em banco sem usuários e exige `SEED_PASSWORD` 
 | GET | `/health` | Health check |
 
 ## Autenticação
+
+Login pode exigir código TOTP de aplicativo autenticador. Segredos TOTP são protegidos com AES-GCM e chave de criptografia separada. Configure ou desative o autenticador em Configurações → Segurança.
 
 Sessões em cookie HttpOnly SameSite, validade de 15 minutos, logout com revogação. Login limita cinco falhas por IP a cada 15 minutos. Senhas novas exigem 12 caracteres com maiúscula, minúscula, número e símbolo.
 

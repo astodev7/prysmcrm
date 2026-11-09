@@ -2,8 +2,6 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import {
   BarChart3,
   Bell,
-  ShieldCheck,
-  ArrowLeft,
   BriefcaseBusiness,
   CalendarDays,
   Check,
@@ -27,6 +25,8 @@ import {
   UsersRound,
   WalletCards,
   X,
+  Activity,
+  FileText,
 } from "lucide-react";
 import {
   api,
@@ -62,6 +62,8 @@ type Page =
   | "Financeiro"
   | "Despesas"
   | "Relatórios"
+  | "Acompanhamento"
+  | "Propostas"
   | "Configurações";
 
 function exportCsv(filename: string, rows: (string | number)[][]) {
@@ -92,6 +94,8 @@ const nav: [Page, typeof LayoutDashboard][] = [
   ["Dashboard", LayoutDashboard],
   ["Leads", Target],
   ["Pipeline", KanbanSquare],
+  ["Acompanhamento", Activity],
+  ["Propostas", FileText],
   ["Clientes", UsersRound],
   ["Projetos", BriefcaseBusiness],
   ["Tarefas", ListTodo],
@@ -104,8 +108,7 @@ const nav: [Page, typeof LayoutDashboard][] = [
 function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token?: string) => void | Promise<void> }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [authenticatorCode, setAuthenticatorCode] = useState("");
-  const [step, setStep] = useState<"credentials" | "authenticator">("credentials");
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -114,15 +117,7 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token?: string) => v
     setError("");
     setLoading(true);
     try {
-      const res = step === "credentials"
-        ? await api.login(email, password)
-        : await api.login(email, password, authenticatorCode);
-      if (res.otpRequired) {
-        setStep("authenticator");
-        setError("");
-        return;
-      }
-      if (!res.user) throw new Error("Não foi possível concluir o login");
+      const res = await api.login(email, password, otp || undefined);
       await onLogin(res.user, res.token);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha no login");
@@ -133,7 +128,7 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token?: string) => v
 
   return (
     <div className="shell login-shell">
-      <form className={`login-card ${step === "authenticator" ? "login-card-otp" : ""}`} onSubmit={submit}>
+      <form className="login-card" onSubmit={submit}>
         <div className="brand">
           <b>P</b>
           <span>
@@ -141,24 +136,23 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token?: string) => v
             <small>CRM</small>
           </span>
         </div>
-        {step === "authenticator" ? <div className="login-step-icon"><ShieldCheck size={24} /></div> : null}
-        <h1>{step === "authenticator" ? "Verificação em duas etapas" : "Bem-vindo de volta"}</h1>
-        <p>{step === "authenticator" ? "Digite o código de 6 dígitos do seu aplicativo autenticador." : "Acesse seu espaço de trabalho com segurança."}</p>
+        <h1>Entrar no CRM</h1>
+        <p>Use o e-mail e a senha da sua conta.</p>
         {error && <div className="login-error">{error}</div>}
-        {step === "credentials" ? <><label>
+        <label>
           E-mail
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" />
         </label>
         <label>
           Senha
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
-        </label></> : <label className="otp-field">
-          Código autenticador
-          <input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoFocus value={authenticatorCode} onChange={(e) => setAuthenticatorCode(e.target.value.replace(/\D/g, "").slice(0, 6))} required autoComplete="one-time-code" />
-        </label>}
-        {step === "authenticator" && <button className="login-back" type="button" onClick={() => { setStep("credentials"); setAuthenticatorCode(""); setError(""); }}><ArrowLeft size={15} /> Voltar</button>}
+        </label>
+        <label>
+          Código do autenticador <span className="field-hint">se ativado na sua conta</span>
+          <input inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))} autoComplete="one-time-code" aria-label="Código de seis dígitos do aplicativo autenticador" />
+        </label>
         <button className="btn" type="submit" disabled={loading}>
-          {loading ? "Verificando..." : step === "authenticator" ? "Verificar código" : "Entrar"}
+          {loading ? "Entrando..." : "Entrar"}
         </button>
       </form>
     </div>
@@ -177,10 +171,14 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [money, setMoney] = useState<Money[]>([]);
+  const [followUps, setFollowUps] = useState<import("./lib/api").ApiFollowUp[]>([]);
+  const [proposals, setProposals] = useState<import("./lib/api").ApiProposal[]>([]);
   const [modal, setModal] = useState<"lead" | "task" | "expense" | null>(null);
   const [editing, setEditing] = useState<Lead | null>(null);
   const [remove, setRemove] = useState<Lead | null>(null);
+  const [historyLead, setHistoryLead] = useState<Lead | null>(null);
   const [toast, setToast] = useState("");
+  const [deletingLead, setDeletingLead] = useState(false);
   const writeLocks = useRef(new Set<string>());
 
   const notify = (s: string) => {
@@ -219,6 +217,10 @@ export default function App() {
       setProjects(projectsRes.map(mapProject));
       setTasks(tasksRes.map(mapTask));
       setMoney(financeRes.map(mapFinance));
+      if (canSales) {
+        const [followUpRows, proposalRows] = await Promise.all([api.getFollowUps(), api.getProposals()]);
+        setFollowUps(followUpRows); setProposals(proposalRows);
+      }
     } catch (err) {
       notify(err instanceof Error ? err.message : "Erro ao carregar dados");
       if (err && typeof err === "object" && "status" in err && (err as { status: number }).status === 401) {
@@ -269,8 +271,8 @@ export default function App() {
     }
   };
 
-  const saveLead = async (x: Lead) => {
-    if (writeLocks.current.has("lead")) return;
+  const saveLead = async (x: Lead): Promise<boolean> => {
+    if (writeLocks.current.has("lead")) return false;
     writeLocks.current.add("lead");
     try {
       if (x.id && leads.some((y) => y.id === x.id)) {
@@ -282,16 +284,19 @@ export default function App() {
       }
       setModal(null);
       notify("Lead salvo com sucesso");
+      return true;
     } catch (err) {
       notify(err instanceof Error ? err.message : "Erro ao salvar lead");
+      return false;
     } finally {
       writeLocks.current.delete("lead");
     }
   };
 
   const deleteLead = async (lead: Lead) => {
-    if (writeLocks.current.has("delete-lead")) return;
-    writeLocks.current.add("delete-lead");
+    if (writeLocks.current.has("delete:" + lead.id)) return;
+    writeLocks.current.add("delete:" + lead.id);
+    setDeletingLead(true);
     try {
       await api.deleteLead(lead.id);
       setLeads((v) => v.filter((x) => x.id !== lead.id));
@@ -300,20 +305,23 @@ export default function App() {
     } catch (err) {
       notify(err instanceof Error ? err.message : "Erro ao excluir lead");
     } finally {
-      writeLocks.current.delete("delete-lead");
+      writeLocks.current.delete("delete:" + lead.id);
+      setDeletingLead(false);
     }
   };
 
-  const createTask = async (title: string, relation: string) => {
-    if (writeLocks.current.has("task")) return;
+  const createTask = async (title: string, relation: string): Promise<boolean> => {
+    if (writeLocks.current.has("task")) return false;
     writeLocks.current.add("task");
     try {
       const created = await api.createTask({ title, relation });
       setTasks((v) => [mapTask(created), ...v]);
       setModal(null);
       notify("Tarefa criada");
+      return true;
     } catch (err) {
       notify(err instanceof Error ? err.message : "Erro ao criar tarefa");
+      return false;
     } finally {
       writeLocks.current.delete("task");
     }
@@ -329,8 +337,8 @@ export default function App() {
     }
   };
 
-  const createExpense = async (name: string, value: string) => {
-    if (writeLocks.current.has("expense")) return;
+  const createExpense = async (name: string, value: string): Promise<boolean> => {
+    if (writeLocks.current.has("expense")) return false;
     writeLocks.current.add("expense");
     try {
       const created = await api.createFinance({
@@ -344,8 +352,10 @@ export default function App() {
       setMoney((v) => [mapFinance(created), ...v]);
       setModal(null);
       notify("Despesa registrada");
+      return true;
     } catch (err) {
       notify(err instanceof Error ? err.message : "Erro ao registrar despesa");
+      return false;
     } finally {
       writeLocks.current.delete("expense");
     }
@@ -439,9 +449,11 @@ export default function App() {
         <section className="content">
           {page === "Dashboard" && <Dashboard leads={leads} money={money} tasks={tasks} projects={projects} go={setPage} userName={user.name.split(" ")[0]} />}
           {page === "Leads" && (
-            <Leads leads={leads} move={move} edit={(x) => { setEditing(x); setModal("lead"); }} add={() => { setEditing(null); setModal("lead"); }} remove={setRemove} />
+            <Leads leads={leads} move={move} edit={(x) => { setEditing(x); setModal("lead"); }} add={() => { setEditing(null); setModal("lead"); }} remove={setRemove} history={setHistoryLead} />
           )}
           {page === "Pipeline" && <Pipeline leads={leads} move={move} add={() => setModal("lead")} />}
+          {page === "Acompanhamento" && <FollowUpCenter leads={leads} rows={followUps} refresh={loadData} notify={notify} />}
+          {page === "Propostas" && <ProposalCenter leads={leads} rows={proposals} refresh={loadData} notify={notify} />}
           {page === "Clientes" && <Clients clients={clients} projects={projects} />}
           {page === "Projetos" && <Projects projects={projects} clients={clients} />}
           {page === "Tarefas" && <Tasks tasks={tasks} onToggle={toggleTask} add={() => setModal("task")} />}
@@ -454,13 +466,14 @@ export default function App() {
       {modal === "lead" && <LeadForm lead={editing} close={() => setModal(null)} save={saveLead} />}
       {modal === "task" && <QuickForm type="task" close={() => setModal(null)} save={createTask} />}
       {modal === "expense" && <QuickForm type="expense" close={() => setModal(null)} save={createExpense} />}
+      {historyLead && <ActivityTimeline lead={historyLead} close={() => setHistoryLead(null)} notify={notify} />}
       {remove && (
         <Modal title="Excluir lead?" sub={`Esta ação removerá ${remove.company} do CRM.`} close={() => setRemove(null)}>
           <div className="confirm">
             <Trash2 />
             <p>Esta operação não poderá ser desfeita.</p>
             <button onClick={() => setRemove(null)}>Cancelar</button>
-            <button className="danger" onClick={() => deleteLead(remove)}>Excluir definitivamente</button>
+            <button className="danger" onClick={() => deleteLead(remove)} disabled={deletingLead}>{deletingLead ? "Excluindo…" : "Excluir definitivamente"}</button>
           </div>
         </Modal>
       )}
@@ -510,11 +523,18 @@ function Dashboard({ leads, money, tasks, projects, go, userName }: { leads: Lea
   const [period, setPeriod] = useState<"30 dias" | "Todo período">("30 dias");
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const periodLeads = period === "30 dias" ? leads.filter((x) => !x.createdAt || new Date(x.createdAt).getTime() >= cutoff) : leads;
-  const periodMoney = period === "30 dias" ? money.filter((x) => !x.createdAt || new Date(x.createdAt).getTime() >= cutoff) : money;
+  const periodMoney = period === "30 dias" ? money.filter((x) => {
+    const effectiveDate = x.status === "Pago" ? x.paidAt : x.dueDate || x.createdAt;
+    return !effectiveDate || new Date(effectiveDate).getTime() >= cutoff;
+  }) : money;
   const rec = periodMoney.filter((x) => x.kind === "receita" && x.status === "Pago").reduce((s, x) => s + x.value, 0);
   const exp = periodMoney.filter((x) => x.kind === "despesa" && x.status === "Pago").reduce((s, x) => s + x.value, 0);
+  const receivable = periodMoney.filter((x) => x.kind === "receita" && ["Pendente", "Atrasada"].includes(x.status)).reduce((s, x) => s + x.value, 0);
+  const pendingExpense = periodMoney.filter((x) => x.kind === "despesa" && ["Pendente", "Atrasada"].includes(x.status)).reduce((s, x) => s + x.value, 0);
   const pipe = periodLeads.filter((x) => !["Ganho", "Perdido"].includes(x.status)).reduce((s, x) => s + x.value, 0);
-  const conv = periodLeads.length ? Math.round((periodLeads.filter((x) => x.status === "Ganho").length / periodLeads.length) * 100) : 0;
+  const won = periodLeads.filter((x) => x.status === "Ganho");
+  const sales = won.reduce((s, x) => s + x.value, 0);
+  const conv = periodLeads.length ? Math.round((won.length / periodLeads.length) * 100) : 0;
   return (
     <>
       <Head title={`Bom dia, ${userName}`} sub="Aqui está o pulso da sua operação hoje.">
@@ -523,35 +543,28 @@ function Dashboard({ leads, money, tasks, projects, go, userName }: { leads: Lea
       </Head>
       <div className="metrics">
         <Metric name="Pipeline ativo" value={brl(pipe)} Icon={Target} />
+        <Metric name="Vendas fechadas" value={brl(sales)} Icon={BriefcaseBusiness} />
         <Metric name="Receita recebida" value={brl(rec)} Icon={CircleDollarSign} />
         <Metric name="Lucro realizado" value={brl(rec - exp)} Icon={TrendingUp} />
         <Metric name="Taxa de conversão" value={`${conv}%`} Icon={BarChart3} />
       </div>
+      <div className="strip"><span>A receber<b>{brl(receivable)}</b></span><span>Despesas pagas<b>{brl(exp)}</b></span><span>Despesas pendentes<b>{brl(pendingExpense)}</b></span><span>Ticket médio<b>{brl(won.length ? sales / won.length : 0)}</b></span></div>
       <div className="dash">
         <article className="panel chart">
-          <PanelHead title="Desempenho financeiro" sub="Receitas, despesas e lucro realizado" />
+          <PanelHead title="Desempenho financeiro" sub="Pagamentos confirmados no período" />
           <div className="chartnums">
             <span>Receita <b>{brl(rec)}</b></span>
             <span>Despesas <b>{brl(exp)}</b></span>
             <span>Lucro <b>{brl(rec - exp)}</b></span>
           </div>
-          <svg viewBox="0 0 700 180" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-                <stop stopColor="#8B7CC7" stopOpacity=".25" />
-                <stop offset="1" stopColor="#8B7CC7" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            <path d="M0 150 L65 130 L130 140 L195 96 L260 108 L325 72 L390 82 L455 46 L520 62 L585 28 L650 40 L700 18 L700 180 L0 180Z" fill="url(#g)" />
-            <path d="M0 150 L65 130 L130 140 L195 96 L260 108 L325 72 L390 82 L455 46 L520 62 L585 28 L650 40 L700 18" fill="none" stroke="#8B7CC7" strokeWidth="2" />
-          </svg>
+          {rec + exp === 0 && <p className="note">Ainda não há pagamentos confirmados neste período para formar uma série histórica.</p>}
         </article>
         <article className="panel funnel">
           <PanelHead title="Funil de vendas" sub={`${periodLeads.length} oportunidades no período`} />
           {["Novo", "Interessado", "Proposta enviada", "Em negociação", "Ganho"].map((s, i) => (
             <div key={s}>
               <span>{s}<b>{i === 0 ? periodLeads.length : periodLeads.filter((x) => x.status === s).length}</b></span>
-              <i><b style={{ width: `${100 - i * 18}%` }} /></i>
+              <i><b style={{ width: `${periodLeads.length ? periodLeads.filter((x) => x.status === s).length / periodLeads.length * 100 : 0}%` }} /></i>
             </div>
           ))}
         </article>
@@ -579,7 +592,7 @@ function Dashboard({ leads, money, tasks, projects, go, userName }: { leads: Lea
                 <b>{brl(x.value)}</b>
               </div>
             ))}
-            {projects.length === 0 && <p className="note">Nenhum projeto ainda.</p>}
+            {projects.length === 0 && <div className="empty-state"><BriefcaseBusiness size={25} /><strong>Nenhum projeto por aqui</strong><span>Assim que houver um projeto vinculado a um cliente, ele aparecerá neste resumo.</span></div>}
           </div>
           <button type="button" className="btn plain footbtn" onClick={() => go("Projetos")}>Ver todos os projetos</button>
         </article>
@@ -590,7 +603,7 @@ function Dashboard({ leads, money, tasks, projects, go, userName }: { leads: Lea
 function Clock() {
   return <i className="clock"><CalendarDays size={14} /></i>;
 }
-function Leads({ leads, edit, add, remove }: { leads: Lead[]; move: (id: string, status: Status) => void; edit: (l: Lead) => void; add: () => void; remove: (l: Lead) => void }) {
+function Leads({ leads, edit, add, remove, history }: { leads: Lead[]; move: (id: string, status: Status) => void; edit: (l: Lead) => void; add: () => void; remove: (l: Lead) => void; history: (l: Lead) => void }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("Todos");
   const [source, setSource] = useState("");
@@ -609,12 +622,12 @@ function Leads({ leads, edit, add, remove }: { leads: Lead[]; move: (id: string,
           </select>
           <select value={source} onChange={(e) => setSource(e.target.value)} aria-label="Filtrar por origem"><option value="">Todas as origens</option>{[...new Set(leads.map((x) => x.source).filter(Boolean))].map((item) => <option key={item}>{item}</option>)}</select>
         </div>
-        <Table leads={filtered} edit={edit} remove={remove} />
+        <Table leads={filtered} edit={edit} remove={remove} history={history} />
       </article>
     </>
   );
 }
-function Table({ leads, edit, remove }: { leads: Lead[]; edit: (l: Lead) => void; remove: (l: Lead) => void }) {
+function Table({ leads, edit, remove, history }: { leads: Lead[]; edit: (l: Lead) => void; remove: (l: Lead) => void; history: (l: Lead) => void }) {
   return (
     <div className="scroll">
       <table>
@@ -629,8 +642,9 @@ function Table({ leads, edit, remove }: { leads: Lead[]; edit: (l: Lead) => void
               <td><strong>{x.next}</strong><small>{x.date}</small></td>
               <td><strong>{brl(x.value)}</strong><small>{x.probability}% prob.</small></td>
               <td>
+                <button type="button" onClick={() => history(x)}>Histórico</button>
                 <button type="button" onClick={() => edit(x)}>Editar</button>
-                <button type="button" onClick={() => remove(x)}><Trash2 size={14} /></button>
+                <button type="button" onClick={() => remove(x)} aria-label={"Excluir lead " + x.company} title="Excluir lead"><Trash2 size={14} /></button>
               </td>
             </tr>
           ))}
@@ -685,6 +699,7 @@ function Clients({ clients, projects }: { clients: Client[]; projects: Project[]
               ))}
             </tbody>
           </table>
+          {clients.length === 0 && <div className="empty-state"><UsersRound size={25} /><strong>Nenhum cliente cadastrado</strong><span>Quando um lead for marcado como ganho, ele aparecerá aqui automaticamente.</span></div>}
         </div>
       </article>
     </>
@@ -703,7 +718,7 @@ function Projects({ projects, clients }: { projects: Project[]; clients: Client[
             <strong>{brl(x.value)}<small>Prazo {x.deadline}</small></strong>
           </div>
         ))}
-        {projects.length === 0 && <p className="note">Nenhum projeto cadastrado.</p>}
+        {projects.length === 0 && <div className="empty-state"><BriefcaseBusiness size={25} /><strong>Nenhum projeto cadastrado</strong><span>Os projetos vinculados aos seus clientes aparecerão nesta área.</span></div>}
       </article>
     </>
   );
@@ -795,6 +810,29 @@ function Reports({ leads, money }: { leads: Lead[]; money: Money[] }) {
     </>
   );
 }
+
+function FollowUpCenter({ leads, rows, refresh, notify }: { leads: Lead[]; rows: import("./lib/api").ApiFollowUp[]; refresh: () => Promise<void>; notify: (s: string) => void }) {
+  const [leadId, setLeadId] = useState(leads[0]?.id ?? ""); const [description, setDescription] = useState(""); const [dueAt, setDueAt] = useState(""); const [busy, setBusy] = useState(false);
+  const act = async (id: string, status: "CONCLUIDO" | "CANCELADO") => { try { await api.updateFollowUp(id, { status }); await refresh(); } catch (e) { notify(e instanceof Error ? e.message : "Falha ao atualizar acompanhamento"); } };
+  const submit = async (e: FormEvent) => { e.preventDefault(); if (busy) return; setBusy(true); try { await api.createFollowUp({ leadId, description, dueAt: new Date(dueAt).toISOString() }); setDescription(""); await refresh(); notify("Acompanhamento agendado"); } catch (e) { notify(e instanceof Error ? e.message : "Falha ao agendar"); } finally { setBusy(false); } };
+  const pending = rows.filter((r) => r.status === "PENDENTE"); const overdue = pending.filter((r) => new Date(r.dueAt) < new Date());
+  return <><Head k="COMERCIAL" title="Central de acompanhamento" sub={`${pending.length} pendentes · ${overdue.length} atrasados`} /><article className="panel form"><h2>Agendar retorno</h2><form className="userform" onSubmit={submit}><label>Lead<select value={leadId} onChange={(e) => setLeadId(e.target.value)} required>{leads.map((l) => <option key={l.id} value={l.id}>{l.company}</option>)}</select></label><label>Descrição<input value={description} onChange={(e) => setDescription(e.target.value)} required /></label><label>Data e hora<input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} required /></label><Btn type="submit" disabled={busy || leads.length === 0}>{busy ? "Salvando…" : "Agendar"}</Btn></form></article><article className="panel table"><div className="scroll"><table><thead><tr><th>DATA</th><th>LEAD</th><th>ACOMPANHAMENTO</th><th>STATUS</th><th>AÇÃO</th></tr></thead><tbody>{rows.map((r) => <tr key={r.id}><td>{new Date(r.dueAt).toLocaleString("pt-BR")}</td><td>{r.lead.company}</td><td>{r.description}</td><td>{r.status === "PENDENTE" && new Date(r.dueAt) < new Date() ? "Atrasado" : r.status}</td><td>{r.status === "PENDENTE" && <><button onClick={() => act(r.id, "CONCLUIDO")}>Concluir</button><button onClick={() => act(r.id, "CANCELADO")}>Cancelar</button></>}</td></tr>)}</tbody></table>{rows.length === 0 && <p className="note">Nenhum acompanhamento cadastrado.</p>}</div></article></>;
+}
+
+function ProposalCenter({ leads, rows, refresh, notify }: { leads: Lead[]; rows: import("./lib/api").ApiProposal[]; refresh: () => Promise<void>; notify: (s: string) => void }) {
+  const [leadId, setLeadId] = useState(leads[0]?.id ?? ""); const [title, setTitle] = useState(""); const [description, setDescription] = useState(""); const [value, setValue] = useState(""); const [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent) => { e.preventDefault(); if (busy) return; setBusy(true); try { await api.createProposal(leadId, { title, description, items: [{ name: title, quantity: 1, unitPrice: Number(value) }], discount: 0 }); setTitle(""); setDescription(""); setValue(""); await refresh(); notify("Proposta criada"); } catch (e) { notify(e instanceof Error ? e.message : "Falha ao criar proposta"); } finally { setBusy(false); } };
+  return <><Head k="COMERCIAL" title="Propostas comerciais" sub="Propostas versionadas e vinculadas às oportunidades." /><article className="panel form"><form className="userform" onSubmit={submit}><label>Lead<select value={leadId} onChange={(e) => setLeadId(e.target.value)} required>{leads.map((l) => <option key={l.id} value={l.id}>{l.company}</option>)}</select></label><label>Título do projeto<input value={title} onChange={(e) => setTitle(e.target.value)} required /></label><label>Descrição<input value={description} onChange={(e) => setDescription(e.target.value)} required /></label><label>Valor contratado (R$)<input type="number" min="0.01" step="0.01" value={value} onChange={(e) => setValue(e.target.value)} required /></label><Btn type="submit" disabled={busy || leads.length === 0}>{busy ? "Salvando…" : "Criar proposta"}</Btn></form></article><article className="panel table"><div className="scroll"><table><thead><tr><th>PROPOSTA</th><th>EMPRESA</th><th>STATUS</th><th>VERSÃO</th><th>VALOR</th></tr></thead><tbody>{rows.map((p) => <tr key={p.id}><td>{p.title}</td><td>{p.lead?.company}</td><td>{p.status}</td><td>v{p.version}</td><td>{brl(Number(p.total))}</td></tr>)}</tbody></table>{rows.length === 0 && <p className="note">Nenhuma proposta cadastrada.</p>}</div></article></>;
+}
+
+function ActivityTimeline({ lead, close, notify }: { lead: Lead; close: () => void; notify: (s: string) => void }) {
+  const [rows, setRows] = useState<{ id: string; type: string; content: string; createdAt: string }[]>([]); const [type, setType] = useState("OBSERVACAO"); const [content, setContent] = useState(""); const [busy, setBusy] = useState(false);
+  const load = useCallback(() => api.getLeadActivities(lead.id).then(setRows).catch((e) => notify(e instanceof Error ? e.message : "Falha ao carregar histórico")), [lead.id, notify]);
+  useEffect(() => { void load(); }, [load]);
+  const submit = async (e: FormEvent) => { e.preventDefault(); if (busy) return; setBusy(true); try { await api.createLeadActivity(lead.id, { type, content }); setContent(""); await load(); } catch (e) { notify(e instanceof Error ? e.message : "Falha ao registrar atividade"); } finally { setBusy(false); } };
+  return <Modal title={`Histórico · ${lead.company}`} sub="Atividades registradas em ordem cronológica." close={close}><div className="quick"><form className="userform" onSubmit={submit}><label>Tipo<select value={type} onChange={(e) => setType(e.target.value)}><option value="OBSERVACAO">Observação</option><option value="LIGACAO">Ligação</option><option value="MENSAGEM_ENVIADA">Mensagem enviada</option><option value="MENSAGEM_RECEBIDA">Mensagem recebida</option><option value="REUNIAO">Reunião</option><option value="PROPOSTA">Proposta enviada/atualizada</option></select></label><label>Descrição<input value={content} onChange={(e) => setContent(e.target.value)} required /></label><Btn type="submit" disabled={busy}>{busy ? "Salvando…" : "Registrar"}</Btn></form><ol className="activity-timeline">{rows.map((r) => <li key={r.id}><strong>{r.type.replaceAll("_", " ")}</strong><p>{r.content}</p><small>{new Date(r.createdAt).toLocaleString("pt-BR")}</small></li>)}</ol></div></Modal>;
+}
+
 function Modal({ title, sub, close, children }: { title: string; sub: string; close: () => void; children: React.ReactNode }) {
   return (
     <div className="backdrop">
@@ -805,16 +843,16 @@ function Modal({ title, sub, close, children }: { title: string; sub: string; cl
     </div>
   );
 }
-function LeadForm({ lead, close, save }: { lead: Lead | null; close: () => void; save: (l: Lead) => void }) {
+function LeadForm({ lead, close, save }: { lead: Lead | null; close: () => void; save: (l: Lead) => Promise<boolean> }) {
   const [saving, setSaving] = useState(false);
-  const submitting = useRef(false);
+  const submitLock = useRef(false);
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (submitting.current) return;
-    submitting.current = true;
+    if (submitLock.current) return;
+    submitLock.current = true;
     setSaving(true);
     const d = new FormData(e.currentTarget);
-    await save({
+    const saved = await save({
       id: lead?.id || "",
       company: String(d.get("company")),
       contact: String(d.get("contact")),
@@ -830,14 +868,14 @@ function LeadForm({ lead, close, save }: { lead: Lead | null; close: () => void;
       date: String(d.get("date") || ""),
       createdAt: lead?.createdAt || new Date().toISOString(),
     });
-    submitting.current = false;
-    setSaving(false);
+    if (saved) close();
+    else { submitLock.current = false; setSaving(false); }
   };
   return (
     <Modal title={lead ? "Editar lead" : "Novo lead"} sub="Dados comerciais conectados ao pipeline." close={close}>
       <form onSubmit={submit} className="modalform">
         {[ ["company", "Empresa", lead?.company], ["contact", "Responsável", lead?.contact], ["email", "E-mail", lead?.email], ["phone", "Telefone", lead?.phone], ["segment", "Segmento", lead?.segment], ["value", "Valor estimado", lead?.value ?? 0], ["probability", "Probabilidade (%)", lead?.probability ?? 0], ["next", "Próxima ação", lead?.next]].map(([n, l, v]) => (
-          <label key={String(n)}>{l}<input name={String(n)} required={n === "company" || n === "contact"} type={n === "email" ? "email" : n === "value" || n === "probability" ? "number" : "text"} min={n === "value" || n === "probability" ? 0 : undefined} max={n === "probability" ? 100 : undefined} step={n === "value" ? "0.01" : "1"} defaultValue={v ?? ""} /></label>
+          <label key={String(n)}>{l}<input name={String(n)} required={n === "company" || n === "contact"} type={n === "value" ? "number" : n === "probability" ? "number" : "text"} min={n === "value" || n === "probability" ? 0 : undefined} max={n === "probability" ? 100 : undefined} step={n === "value" ? "0.01" : "1"} defaultValue={v ?? ""} /></label>
         ))}
         <label>Próximo contato<input name="date" type="date" defaultValue={lead?.date || ""} /></label>
         <label>Origem
@@ -852,25 +890,34 @@ function LeadForm({ lead, close, save }: { lead: Lead | null; close: () => void;
         </label>
         <footer>
           <Btn plain onClick={close}>Cancelar</Btn>
-          <Btn type="submit" disabled={saving}>{saving ? "Salvando..." : "Salvar lead"}</Btn>
+          <Btn type="submit" disabled={saving}>{saving ? "Salvando…" : "Salvar lead"}</Btn>
         </footer>
       </form>
     </Modal>
   );
 }
-function QuickForm({ type, close, save }: { type: "task" | "expense"; close: () => void; save: (a: string, b: string) => void }) {
+function QuickForm({ type, close, save }: { type: "task" | "expense"; close: () => void; save: (a: string, b: string) => Promise<boolean> }) {
   const [a, setA] = useState("");
   const [b, setB] = useState("");
   const [saving, setSaving] = useState(false);
-  const submitting = useRef(false);
+  const submitLock = useRef(false);
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (submitLock.current) return;
+    submitLock.current = true;
+    setSaving(true);
+    const saved = await save(a, b);
+    if (saved) close();
+    else { submitLock.current = false; setSaving(false); }
+  };
   return (
     <Modal title={type === "task" ? "Nova tarefa" : "Nova despesa"} sub="O registro fica salvo no banco." close={close}>
-      <form className="modalform" onSubmit={async (e) => { e.preventDefault(); if (submitting.current) return; submitting.current = true; setSaving(true); try { await save(a, b); } finally { submitting.current = false; setSaving(false); } }}>
+      <form className="modalform" onSubmit={submit}>
         <label>{type === "task" ? "Título" : "Descrição"}<input value={a} onChange={(e) => setA(e.target.value)} required /></label>
         <label>{type === "task" ? "Vínculo" : "Valor (R$)"}<input value={b} onChange={(e) => setB(e.target.value)} required /></label>
         <footer>
           <Btn plain onClick={close}>Cancelar</Btn>
-          <Btn type="submit" disabled={saving}>{saving ? "Salvando..." : type === "task" ? "Criar tarefa" : "Registrar despesa"}</Btn>
+          <Btn type="submit" disabled={saving}>{saving ? "Salvando…" : type === "task" ? "Criar tarefa" : "Registrar despesa"}</Btn>
         </footer>
       </form>
     </Modal>
@@ -922,43 +969,11 @@ function SettingsPage({ notify, user, logout }: { notify: (s: string) => void; u
             />
           )}
           {tab === "Notificações" && <NotifySettings />}
-          {tab === "Segurança" && <><PasswordPanel notify={notify} logout={logout} /><AuthenticatorPanel notify={notify} /></>}
+          {tab === "Segurança" && <><PasswordPanel notify={notify} logout={logout} /><AuthenticatorPanel notify={notify} logout={logout} /></>}
         </article>
       </div>
     </>
   );
-}
-
-function AuthenticatorPanel({ notify }: { notify: (s: string) => void }) {
-  const [enabled, setEnabled] = useState(false);
-  const [secret, setSecret] = useState("");
-  const [code, setCode] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { api.authenticatorStatus().then((s) => setEnabled(s.enabled)).catch(() => undefined); }, []);
-  const setup = async () => {
-    setBusy(true);
-    try { const result = await api.authenticatorSetup(); setSecret(result.secret); }
-    catch (err) { notify(err instanceof Error ? err.message : "Não foi possível iniciar a configuração"); }
-    finally { setBusy(false); }
-  };
-  const verify = async (e: FormEvent) => {
-    e.preventDefault(); setBusy(true);
-    try { await api.authenticatorVerify(code); setEnabled(true); setSecret(""); setCode(""); notify("Autenticador ativado"); }
-    catch (err) { notify(err instanceof Error ? err.message : "Código inválido"); }
-    finally { setBusy(false); }
-  };
-  const disable = async (e: FormEvent) => {
-    e.preventDefault(); setBusy(true);
-    try { await api.authenticatorDisable(password, code); setEnabled(false); setPassword(""); setCode(""); notify("Autenticador desativado"); }
-    catch (err) { notify(err instanceof Error ? err.message : "Não foi possível desativar"); }
-    finally { setBusy(false); }
-  };
-  return <section className="authenticator-panel"><div className="authenticator-heading"><ShieldCheck size={20} /><span><h2>Aplicativo autenticador</h2><p>Adicione uma segunda etapa de proteção ao entrar.</p></span><b className={enabled ? "security-state on" : "security-state"}>{enabled ? "Ativado" : "Desativado"}</b></div>
-    {!enabled && !secret && <button className="btn plain" type="button" onClick={setup} disabled={busy}>{busy ? "Preparando..." : "Configurar autenticador"}</button>}
-    {!enabled && secret && <form className="userform" onSubmit={verify}><p>Adicione esta chave manualmente no Google Authenticator, Microsoft Authenticator ou app compatível:</p><code className="totp-secret">{secret}</code><label>Código de 6 dígitos<input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" pattern="[0-9]{6}" required /></label><button className="btn" type="submit" disabled={busy}>{busy ? "Validando..." : "Ativar autenticação"}</button></form>}
-    {enabled && <form className="userform" onSubmit={disable}><p>Para desativar, confirme sua senha e um código atual do aplicativo.</p><label>Senha atual<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label><label>Código autenticador<input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" pattern="[0-9]{6}" required /></label><button className="btn plain" type="submit" disabled={busy}>{busy ? "Validando..." : "Desativar autenticador"}</button></form>}
-  </section>;
 }
 
 
@@ -967,23 +982,73 @@ function PasswordPanel({ notify, logout }: { notify: (s: string) => void; logout
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [saving, setSaving] = useState(false);
-  const submitting = useRef(false);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (submitting.current) return;
-    submitting.current = true;
     if (next !== confirm) { notify("As novas senhas não coincidem"); return; }
     setSaving(true);
     try { await api.changePassword(current, next); notify("Senha alterada. Entre novamente."); logout(); }
     catch (err) { notify(err instanceof Error ? err.message : "Não foi possível alterar a senha"); }
-    finally { submitting.current = false; setSaving(false); }
+    finally { setSaving(false); }
   };
   return <form className="userform" onSubmit={submit}><h2>Senha e sessão</h2><p>Use pelo menos 12 caracteres com maiúscula, minúscula, número e símbolo.</p>
     <label>Senha atual<input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required /></label>
     <label>Nova senha<input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} minLength={12} required /></label>
     <label>Confirme a nova senha<input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} minLength={12} required /></label>
-    <Btn type="submit" disabled={saving}>{saving ? "Salvando..." : "Alterar senha"}</Btn>
+    <Btn type="submit">{saving ? "Salvando..." : "Alterar senha"}</Btn>
   </form>;
+}
+
+
+function AuthenticatorPanel({ notify, logout }: { notify: (s: string) => void; logout: () => void }) {
+  const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [password, setPassword] = useState("");
+  const [secret, setSecret] = useState("");
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let active = true;
+    api.totpStatus().then((result) => { if (active) setEnabled(result.enabled); })
+      .catch((err) => { if (active) notify(err instanceof Error ? err.message : "Não foi possível consultar o autenticador"); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [notify]);
+  const begin = async (e: FormEvent) => {
+    e.preventDefault(); setBusy(true);
+    try { const result = await api.setupTotp(password); setSecret(result.secret); setCode(""); notify("Chave de configuração criada"); }
+    catch (err) { notify(err instanceof Error ? err.message : "Não foi possível iniciar a configuração"); }
+    finally { setBusy(false); }
+  };
+  const activate = async (e: FormEvent) => {
+    e.preventDefault(); setBusy(true);
+    try { await api.verifyTotp(code); setEnabled(true); setSecret(""); setCode(""); setPassword(""); notify("Autenticador ativado para sua conta"); }
+    catch (err) { notify(err instanceof Error ? err.message : "Código inválido"); }
+    finally { setBusy(false); }
+  };
+  const disable = async (e: FormEvent) => {
+    e.preventDefault(); setBusy(true);
+    try { await api.disableTotp(password, code); notify("Autenticador desativado. Entre novamente."); logout(); }
+    catch (err) { notify(err instanceof Error ? err.message : "Não foi possível desativar o autenticador"); }
+    finally { setBusy(false); }
+  };
+  return <section className="authenticator-panel"><h2>Aplicativo autenticador</h2>
+    <p>{loading ? "Verificando configuração…" : enabled ? "Ativo: sua conta pede um código temporário a cada login." : "Adicione uma segunda etapa de verificação usando um app compatível com TOTP."}</p>
+    {!loading && enabled && <form className="userform" onSubmit={disable}>
+      <label>Senha atual<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+      <label>Código atual do autenticador<input inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} required /></label>
+      <Btn type="submit" disabled={busy}>{busy ? "Aguarde…" : "Desativar autenticador"}</Btn>
+    </form>}
+    {!loading && !enabled && !secret && <form className="userform" onSubmit={begin}>
+      <label>Confirme sua senha<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+      <Btn type="submit" disabled={busy}>{busy ? "Preparando…" : "Configurar autenticador"}</Btn>
+    </form>}
+    {!loading && !enabled && secret && <form className="userform" onSubmit={activate}>
+      <p>Abra Google Authenticator, Microsoft Authenticator, 1Password ou outro app TOTP. Adicione uma conta manualmente, escolha código baseado em tempo e informe esta chave:</p>
+      <code className="totp-secret">{secret}</code>
+      <label>Código de seis dígitos gerado pelo app<input inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} autoComplete="one-time-code" required /></label>
+      <Btn type="submit" disabled={busy}>{busy ? "Verificando…" : "Confirmar e ativar"}</Btn>
+    </form>}
+  </section>;
 }
 
 function CompanyForm({ notify }: { notify: (s: string) => void }) {
@@ -1051,7 +1116,7 @@ function CompanyForm({ notify }: { notify: (s: string) => void }) {
             Endereço
             <input value={address} onChange={(e) => setAddress(e.target.value)} />
           </label>
-          <Btn onClick={save} disabled={saving}>{saving ? "Salvando..." : "Salvar alterações"}</Btn>
+          <Btn onClick={save}>{saving ? "Salvando..." : "Salvar alterações"}</Btn>
         </>
       )}
     </>
@@ -1124,7 +1189,6 @@ function UsersPanel({ notify }: { notify: (s: string) => void }) {
       )}
       <form className="userform" onSubmit={create}>
         <h3>Novo usuário</h3>
-        <p>Use pelo menos 12 caracteres, com maiúscula, minúscula, número e símbolo.</p>
         <label>
           Nome
           <input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -1139,7 +1203,7 @@ function UsersPanel({ notify }: { notify: (s: string) => void }) {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            minLength={12}
+            minLength={6}
             required
           />
         </label>
@@ -1152,7 +1216,7 @@ function UsersPanel({ notify }: { notify: (s: string) => void }) {
             <option value="OPERACIONAL">Operacional</option>
           </select>
         </label>
-        <Btn type="submit" disabled={saving}>{saving ? "Salvando..." : "Criar usuário"}</Btn>
+        <Btn type="submit">{saving ? "Salvando..." : "Criar usuário"}</Btn>
       </form>
     </>
   );

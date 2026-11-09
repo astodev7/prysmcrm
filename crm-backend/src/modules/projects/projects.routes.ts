@@ -33,7 +33,7 @@ export async function projectsRoutes(app: FastifyInstance) {
     async (request) => {
       const query = request.query as { status?: string; clientId?: string; search?: string };
 
-      const where: Record<string, unknown> = request.user.role === "ADMIN" ? {} : { ownerId: request.user.sub };
+      const where: Record<string, unknown> = {};
       if (query.status) where.status = query.status;
       if (query.clientId) where.clientId = query.clientId;
       if (query.search) {
@@ -63,7 +63,7 @@ export async function projectsRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       const project = await prisma.project.findUnique({
-        where: { id, ...(request.user.role === "ADMIN" ? {} : { ownerId: request.user.sub }) },
+        where: { id },
         include: {
           client: true,
           tasks: true,
@@ -82,13 +82,12 @@ export async function projectsRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const body = createProjectSchema.parse(request.body);
 
-      const client = await prisma.client.findFirst({ where: { id: body.clientId, ...(request.user.role === "ADMIN" ? {} : { ownerId: request.user.sub }) } });
+      const client = await prisma.client.findUnique({ where: { id: body.clientId } });
       if (!client) throw new AppError("Cliente não encontrado", 404);
 
       const project = await prisma.project.create({
         data: {
           ...body,
-          ownerId: request.user.role === "ADMIN" ? undefined : request.user.sub,
           deadline: body.deadline ? new Date(body.deadline) : null,
         },
         include: {
@@ -106,12 +105,6 @@ export async function projectsRoutes(app: FastifyInstance) {
     async (request) => {
       const { id } = request.params as { id: string };
       const body = updateProjectSchema.parse(request.body);
-      const existing = await prisma.project.findFirst({ where: { id, ...(request.user.role === "ADMIN" ? {} : { ownerId: request.user.sub }) } });
-      if (!existing) throw new AppError("Projeto não encontrado", 404);
-      if (body.clientId && request.user.role !== "ADMIN") {
-        const client = await prisma.client.findFirst({ where: { id: body.clientId, ownerId: request.user.sub } });
-        if (!client) throw new AppError("Cliente não encontrado", 404);
-      }
 
       try {
         const project = await prisma.project.update({
@@ -138,8 +131,6 @@ export async function projectsRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       try {
-        const existing = await prisma.project.findFirst({ where: { id, ...(request.user.role === "ADMIN" ? {} : { ownerId: request.user.sub }) } });
-        if (!existing) throw new AppError("Projeto não encontrado", 404);
         await prisma.project.delete({ where: { id } });
         return reply.status(204).send();
       } catch {

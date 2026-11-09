@@ -44,7 +44,7 @@ export function setStoredUser(user: AuthUser | null) {
   else localStorage.removeItem("crm_user");
 }
 
-async function requestRaw<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, auth = true } = options;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -75,19 +75,6 @@ async function requestRaw<T>(path: string, options: RequestOptions = {}): Promis
   }
 
   return data as T;
-}
-
-const inflightGets = new Map<string, Promise<unknown>>();
-const inflightWrites = new Map<string, Promise<unknown>>();
-function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const method = (options.method ?? "GET").toUpperCase();
-  const identity = `${getToken() ?? "cookie"}:${method}:${path}:${method === "GET" ? "" : JSON.stringify(options.body ?? null)}`;
-  const inflight = method === "GET" ? inflightGets : inflightWrites;
-  const pending = inflight.get(identity);
-  if (pending) return pending as Promise<T>;
-  const requestPromise = requestRaw<T>(path, options).finally(() => inflight.delete(identity));
-  inflight.set(identity, requestPromise);
-  return requestPromise;
 }
 
 // ===== Types (backend shape) =====
@@ -168,10 +155,14 @@ export type ApiFinance = {
   relation: string | null;
   dueDate: string | null;
   paidAt: string | null;
+  saleId?: string | null;
   category: string | null;
   notes: string | null;
   createdAt: string;
 };
+
+export type ApiFollowUp = { id: string; leadId: string; description: string; dueAt: string; status: "PENDENTE" | "CONCLUIDO" | "CANCELADO"; lead: { id: string; company: string; contact: string } };
+export type ApiProposal = { id: string; leadId: string; title: string; packageName: string | null; description: string; items: { name: string; quantity: number; unitPrice: number }[]; discount: number; total: number; terms: string | null; deadline: string | null; status: string; version: number; lead?: { company: string } };
 
 export type ApiCompany = {
   id: string;
@@ -194,20 +185,20 @@ export type ApiUser = {
 
 // ===== Auth =====
 export const api = {
-  login: (email: string, password: string, authenticatorCode?: string) =>
-    request<{ user?: AuthUser; token?: string; otpRequired?: boolean }>("/auth/login", {
+  login: (email: string, password: string, otp?: string) =>
+    request<{ user: AuthUser; token?: string }>("/auth/login", {
       method: "POST",
-      body: { email, password, authenticatorCode },
+      body: { email, password, ...(otp ? { otp } : {}) },
       auth: false,
     }),
 
   me: () => request<AuthUser>("/auth/me"),
-  logout: () => request<void>("/auth/logout", { method: "POST" }),
+  logout: () => getToken() ? Promise.resolve() : request<void>("/auth/logout", { method: "POST" }),
   changePassword: (currentPassword: string, newPassword: string) => request<{ message: string }>("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
-  authenticatorStatus: () => request<{ enabled: boolean }>("/auth/authenticator"),
-  authenticatorSetup: () => request<{ secret: string; otpauthUrl: string }>("/auth/authenticator/setup", { method: "POST" }),
-  authenticatorVerify: (code: string) => request<{ enabled: boolean }>("/auth/authenticator/verify", { method: "POST", body: { code } }),
-  authenticatorDisable: (password: string, code: string) => request<{ enabled: boolean }>("/auth/authenticator/disable", { method: "POST", body: { password, code } }),
+  totpStatus: () => request<{ enabled: boolean }>("/auth/totp/status"),
+  setupTotp: (password: string) => request<{ secret: string; otpauthUrl: string }>("/auth/totp/setup", { method: "POST", body: { password } }),
+  verifyTotp: (code: string) => request<{ enabled: boolean }>("/auth/totp/verify", { method: "POST", body: { code } }),
+  disableTotp: (password: string, code: string) => request<{ enabled: boolean }>("/auth/totp/disable", { method: "POST", body: { password, code } }),
 
   // Leads
   getLeads: (params?: { status?: string; search?: string }) => {
@@ -276,14 +267,28 @@ export const api = {
     request<{
       totalReceitas: number;
       totalDespesas: number;
-      saldo: number;
-      pendentes: { count: number; value: number };
+      lucroRealizado: number;
+      vendasFechadas: number;
+      quantidadeVendas: number;
+      valoresAReceber: number;
+      despesasPendentes: number;
+      lucroProjetado: number;
+      pendentes: { value: number };
     }>("/finance/summary"),
+  recordSalePayment: (saleId: string, amount: number, paidAt?: string) => request<ApiFinance>(`/finance/sales/${saleId}/payments`, { method: "POST", body: { amount, paidAt } }),
   createFinance: (data: Record<string, unknown>) =>
     request<ApiFinance>("/finance", { method: "POST", body: data }),
   updateFinance: (id: string, data: Record<string, unknown>) =>
     request<ApiFinance>(`/finance/${id}`, { method: "PUT", body: data }),
   deleteFinance: (id: string) => request<void>(`/finance/${id}`, { method: "DELETE" }),
+  getFollowUps: () => request<ApiFollowUp[]>("/commercial/follow-ups"),
+  createFollowUp: (data: { leadId: string; description: string; dueAt: string }) => request<ApiFollowUp>("/commercial/follow-ups", { method: "POST", body: data }),
+  updateFollowUp: (id: string, data: { status?: string; dueAt?: string; description?: string }) => request<ApiFollowUp>(`/commercial/follow-ups/${id}`, { method: "PATCH", body: data }),
+  getProposals: () => request<ApiProposal[]>("/commercial/proposals"),
+  createProposal: (leadId: string, data: Record<string, unknown>) => request<ApiProposal>(`/commercial/leads/${leadId}/proposals`, { method: "POST", body: data }),
+  updateProposal: (id: string, data: Record<string, unknown>) => request<ApiProposal>(`/commercial/proposals/${id}`, { method: "PUT", body: data }),
+  getLeadActivities: (leadId: string) => request<{ id: string; type: string; content: string; createdAt: string; actorId: string }[]>(`/commercial/leads/${leadId}/activities`),
+  createLeadActivity: (leadId: string, data: { type: string; content: string }) => request(`/commercial/leads/${leadId}/activities`, { method: "POST", body: data }),
 
   // Company
   getCompany: () => request<ApiCompany | null>("/company"),

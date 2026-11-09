@@ -50,38 +50,63 @@ export async function financeRoutes(app: FastifyInstance) {
   app.get(
     "/summary",
     { onRequest: [app.authorize("ADMIN","FINANCEIRO")] },
-    async () => {
-      const [receitas, despesas] = await Promise.all([
+    async (request) => {
+      const query = request.query as { from?: string; to?: string };
+      const from = query.from ? new Date(query.from) : undefined;
+      const to = query.to ? new Date(query.to) : undefined;
+      const [receitas, despesas, aReceber, despesasPendentes, vendas] = await Promise.all([
         prisma.finance.aggregate({
-          where: { kind: "RECEITA", status: { not: "CANCELADO" } },
+          where: { kind: "RECEITA", status: "PAGO", ...(from || to ? { paidAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}) },
           _sum: { value: true },
         }),
         prisma.finance.aggregate({
-          where: { kind: "DESPESA", status: { not: "CANCELADO" } },
+          where: { kind: "DESPESA", status: "PAGO", ...(from || to ? { paidAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}) },
           _sum: { value: true },
         }),
+        prisma.finance.aggregate({ where: { kind: "RECEITA", status: { in: ["PENDENTE", "ATRASADO"] } }, _sum: { value: true } }),
+        prisma.finance.aggregate({ where: { kind: "DESPESA", status: { in: ["PENDENTE", "ATRASADO"] } }, _sum: { value: true } }),
+        prisma.closedSale.aggregate({ where: { ...(from || to ? { soldAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}) }, _sum: { contractAmount: true }, _count: { id: true } }),
       ]);
 
       const totalReceitas = Number(receitas._sum.value ?? 0);
       const totalDespesas = Number(despesas._sum.value ?? 0);
 
-      const pendentes = await prisma.finance.aggregate({
-        where: { status: "PENDENTE" },
-        _sum: { value: true },
-        _count: { id: true },
-      });
-
       return {
         totalReceitas,
         totalDespesas,
-        saldo: totalReceitas - totalDespesas,
+        lucroRealizado: totalReceitas - totalDespesas,
+        vendasFechadas: Number(vendas._sum.contractAmount ?? 0),
+        quantidadeVendas: vendas._count.id,
+        valoresAReceber: Number(aReceber._sum.value ?? 0),
+        despesasPendentes: Number(despesasPendentes._sum.value ?? 0),
+        lucroProjetado: totalReceitas + Number(aReceber._sum.value ?? 0) - totalDespesas - Number(despesasPendentes._sum.value ?? 0),
         pendentes: {
-          count: pendentes._count.id,
-          value: Number(pendentes._sum.value ?? 0),
+          value: Number(aReceber._sum.value ?? 0),
         },
       };
     },
   );
+
+  // Cada recebimento é um lançamento pago separado; o saldo em aberto é reduzido
+  // dentro da mesma transação, mantendo o contrato original no histórico da venda.
+  app.post("/sales/:id/payments", { onRequest: [app.authorize("ADMIN", "FINANCEIRO")] }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = z.object({ amount: z.number().positive(), paidAt: z.string().datetime().optional() }).parse(request.body);
+    const result = await prisma.$transaction(async (tx) => {
+      const sale = await tx.closedSale.findUnique({ where: { id }, include: { payments: { where: { category: "Contrato", status: { in: ["PENDENTE", "ATRASADO"] } } } } });
+      if (!sale) throw new AppError("Venda não encontrada", 404);
+      const outstanding = sale.payments.reduce((sum, item) => sum + Number(item.value), 0);
+      if (body.amount > outstanding) throw new AppError("O pagamento excede o saldo do contrato", 400);
+      const pending = sale.payments[0];
+      if (!pending) throw new AppError("Este contrato não possui saldo pendente", 409);
+      const remainder = Math.round((outstanding - body.amount) * 100) / 100;
+      if (remainder === 0) await tx.finance.update({ where: { id: pending.id }, data: { status: "CANCELADO" } });
+      else await tx.finance.update({ where: { id: pending.id }, data: { value: remainder } });
+      const payment = await tx.finance.create({ data: { name: `Recebimento — ${pending.name}`, value: body.amount, kind: "RECEITA", status: "PAGO", relation: pending.relation, category: "Parcela recebida", paidAt: body.paidAt ? new Date(body.paidAt) : new Date(), saleId: sale.id } });
+      return payment;
+    });
+    return reply.status(201).send({ ...result, value: Number(result.value) });
+  });
 
   app.get(
     "/:id",
