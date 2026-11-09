@@ -68,12 +68,16 @@ model User {
   role      Role     @default(COMERCIAL)
   active    Boolean  @default(true)
   authVersion Int    @default(0)
+  totpSecret String?
+  totpEnabled Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   leads     Lead[]    @relation("LeadOwner")
   tasks     Task[]    @relation("TaskAssignee")
   createdLeads Lead[] @relation("LeadCreator")
+  ownedClients Client[] @relation("ClientOwner")
+  ownedProjects Project[] @relation("ProjectOwner")
 
   @@map("users")
 }
@@ -131,6 +135,8 @@ model Client {
 
   leadId    String?  @unique
   lead      Lead?    @relation(fields: [leadId], references: [id])
+  ownerId   String?
+  owner     User?    @relation("ClientOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   projects  Project[]
   createdAt DateTime @default(now())
@@ -150,6 +156,8 @@ model Project {
 
   clientId  String
   client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  ownerId   String?
+  owner     User?    @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   tasks     Task[]
   createdAt DateTime @default(now())
@@ -204,6 +212,7 @@ model AuditLog {
   action    String
   entity    String
   entityId  String?
+  details   Json?    @db.JsonB
   createdAt DateTime @default(now())
 
   @@index([actorId, createdAt])

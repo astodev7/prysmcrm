@@ -1,7 +1,9 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   Bell,
+  ShieldCheck,
+  ArrowLeft,
   BriefcaseBusiness,
   CalendarDays,
   Check,
@@ -102,6 +104,8 @@ const nav: [Page, typeof LayoutDashboard][] = [
 function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token?: string) => void | Promise<void> }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [authenticatorCode, setAuthenticatorCode] = useState("");
+  const [step, setStep] = useState<"credentials" | "authenticator">("credentials");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -110,7 +114,15 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token?: string) => v
     setError("");
     setLoading(true);
     try {
-      const res = await api.login(email, password);
+      const res = step === "credentials"
+        ? await api.login(email, password)
+        : await api.login(email, password, authenticatorCode);
+      if (res.otpRequired) {
+        setStep("authenticator");
+        setError("");
+        return;
+      }
+      if (!res.user) throw new Error("Não foi possível concluir o login");
       await onLogin(res.user, res.token);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha no login");
@@ -121,7 +133,7 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token?: string) => v
 
   return (
     <div className="shell login-shell">
-      <form className="login-card" onSubmit={submit}>
+      <form className={`login-card ${step === "authenticator" ? "login-card-otp" : ""}`} onSubmit={submit}>
         <div className="brand">
           <b>P</b>
           <span>
@@ -129,19 +141,24 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token?: string) => v
             <small>CRM</small>
           </span>
         </div>
-        <h1>Entrar no CRM</h1>
-        <p>Use o e-mail e a senha da sua conta.</p>
+        {step === "authenticator" ? <div className="login-step-icon"><ShieldCheck size={24} /></div> : null}
+        <h1>{step === "authenticator" ? "Verificação em duas etapas" : "Bem-vindo de volta"}</h1>
+        <p>{step === "authenticator" ? "Digite o código de 6 dígitos do seu aplicativo autenticador." : "Acesse seu espaço de trabalho com segurança."}</p>
         {error && <div className="login-error">{error}</div>}
-        <label>
+        {step === "credentials" ? <><label>
           E-mail
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="username" />
         </label>
         <label>
           Senha
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
-        </label>
+        </label></> : <label className="otp-field">
+          Código autenticador
+          <input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoFocus value={authenticatorCode} onChange={(e) => setAuthenticatorCode(e.target.value.replace(/\D/g, "").slice(0, 6))} required autoComplete="one-time-code" />
+        </label>}
+        {step === "authenticator" && <button className="login-back" type="button" onClick={() => { setStep("credentials"); setAuthenticatorCode(""); setError(""); }}><ArrowLeft size={15} /> Voltar</button>}
         <button className="btn" type="submit" disabled={loading}>
-          {loading ? "Entrando..." : "Entrar"}
+          {loading ? "Verificando..." : step === "authenticator" ? "Verificar código" : "Entrar"}
         </button>
       </form>
     </div>
@@ -164,6 +181,7 @@ export default function App() {
   const [editing, setEditing] = useState<Lead | null>(null);
   const [remove, setRemove] = useState<Lead | null>(null);
   const [toast, setToast] = useState("");
+  const writeLocks = useRef(new Set<string>());
 
   const notify = (s: string) => {
     setToast(s);
@@ -215,14 +233,6 @@ export default function App() {
     setToken(token ?? null);
     setStoredUser(u);
     setUser(u);
-    const [l, c, p, t, f] = await Promise.all([
-      u.role === "ADMIN" || u.role === "COMERCIAL" ? api.getLeads() : Promise.resolve([]),
-      ["ADMIN", "COMERCIAL", "OPERACIONAL"].includes(u.role) ? api.getClients() : Promise.resolve([]),
-      ["ADMIN", "OPERACIONAL"].includes(u.role) ? api.getProjects() : Promise.resolve([]),
-      ["ADMIN", "COMERCIAL", "OPERACIONAL"].includes(u.role) ? api.getTasks() : Promise.resolve([]),
-      ["ADMIN", "FINANCEIRO"].includes(u.role) ? api.getFinance() : Promise.resolve([]),
-    ]);
-    setLeads(l.map(mapLead)); setClients(c.map(mapClient)); setProjects(p.map(mapProject)); setTasks(t.map(mapTask)); setMoney(f.map(mapFinance));
   };
 
   useEffect(() => {
@@ -260,6 +270,8 @@ export default function App() {
   };
 
   const saveLead = async (x: Lead) => {
+    if (writeLocks.current.has("lead")) return;
+    writeLocks.current.add("lead");
     try {
       if (x.id && leads.some((y) => y.id === x.id)) {
         const updated = await api.updateLead(x.id, mapLeadToApi(x));
@@ -272,10 +284,14 @@ export default function App() {
       notify("Lead salvo com sucesso");
     } catch (err) {
       notify(err instanceof Error ? err.message : "Erro ao salvar lead");
+    } finally {
+      writeLocks.current.delete("lead");
     }
   };
 
   const deleteLead = async (lead: Lead) => {
+    if (writeLocks.current.has("delete-lead")) return;
+    writeLocks.current.add("delete-lead");
     try {
       await api.deleteLead(lead.id);
       setLeads((v) => v.filter((x) => x.id !== lead.id));
@@ -283,10 +299,14 @@ export default function App() {
       notify("Lead excluído");
     } catch (err) {
       notify(err instanceof Error ? err.message : "Erro ao excluir lead");
+    } finally {
+      writeLocks.current.delete("delete-lead");
     }
   };
 
   const createTask = async (title: string, relation: string) => {
+    if (writeLocks.current.has("task")) return;
+    writeLocks.current.add("task");
     try {
       const created = await api.createTask({ title, relation });
       setTasks((v) => [mapTask(created), ...v]);
@@ -294,6 +314,8 @@ export default function App() {
       notify("Tarefa criada");
     } catch (err) {
       notify(err instanceof Error ? err.message : "Erro ao criar tarefa");
+    } finally {
+      writeLocks.current.delete("task");
     }
   };
 
@@ -308,6 +330,8 @@ export default function App() {
   };
 
   const createExpense = async (name: string, value: string) => {
+    if (writeLocks.current.has("expense")) return;
+    writeLocks.current.add("expense");
     try {
       const created = await api.createFinance({
         name,
@@ -322,6 +346,8 @@ export default function App() {
       notify("Despesa registrada");
     } catch (err) {
       notify(err instanceof Error ? err.message : "Erro ao registrar despesa");
+    } finally {
+      writeLocks.current.delete("expense");
     }
   };
 
@@ -455,8 +481,8 @@ function Head({ k = "VISÃO GERAL", title, sub, children }: { k?: string; title:
     </div>
   );
 }
-function Btn({ children, onClick, plain = false, type = "button" }: { children: React.ReactNode; onClick?: () => void; plain?: boolean; type?: "button" | "submit" }) {
-  return <button className={`btn ${plain ? "plain" : ""}`} onClick={onClick} type={type}>{children}</button>;
+function Btn({ children, onClick, plain = false, type = "button", disabled = false }: { children: React.ReactNode; onClick?: () => void; plain?: boolean; type?: "button" | "submit"; disabled?: boolean }) {
+  return <button className={`btn ${plain ? "plain" : ""}`} onClick={onClick} type={type} disabled={disabled}>{children}</button>;
 }
 function Badge({ s }: { s: string }) {
   return (
@@ -512,12 +538,12 @@ function Dashboard({ leads, money, tasks, projects, go, userName }: { leads: Lea
           <svg viewBox="0 0 700 180" preserveAspectRatio="none">
             <defs>
               <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-                <stop stopColor="#a8ff3e" stopOpacity=".25" />
-                <stop offset="1" stopColor="#a8ff3e" stopOpacity="0" />
+                <stop stopColor="#8B7CC7" stopOpacity=".25" />
+                <stop offset="1" stopColor="#8B7CC7" stopOpacity="0" />
               </linearGradient>
             </defs>
             <path d="M0 150 L65 130 L130 140 L195 96 L260 108 L325 72 L390 82 L455 46 L520 62 L585 28 L650 40 L700 18 L700 180 L0 180Z" fill="url(#g)" />
-            <path d="M0 150 L65 130 L130 140 L195 96 L260 108 L325 72 L390 82 L455 46 L520 62 L585 28 L650 40 L700 18" fill="none" stroke="#a8ff3e" strokeWidth="2" />
+            <path d="M0 150 L65 130 L130 140 L195 96 L260 108 L325 72 L390 82 L455 46 L520 62 L585 28 L650 40 L700 18" fill="none" stroke="#8B7CC7" strokeWidth="2" />
           </svg>
         </article>
         <article className="panel funnel">
@@ -780,10 +806,15 @@ function Modal({ title, sub, close, children }: { title: string; sub: string; cl
   );
 }
 function LeadForm({ lead, close, save }: { lead: Lead | null; close: () => void; save: (l: Lead) => void }) {
-  const submit = (e: FormEvent<HTMLFormElement>) => {
+  const [saving, setSaving] = useState(false);
+  const submitting = useRef(false);
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
+    setSaving(true);
     const d = new FormData(e.currentTarget);
-    save({
+    await save({
       id: lead?.id || "",
       company: String(d.get("company")),
       contact: String(d.get("contact")),
@@ -799,12 +830,14 @@ function LeadForm({ lead, close, save }: { lead: Lead | null; close: () => void;
       date: String(d.get("date") || ""),
       createdAt: lead?.createdAt || new Date().toISOString(),
     });
+    submitting.current = false;
+    setSaving(false);
   };
   return (
     <Modal title={lead ? "Editar lead" : "Novo lead"} sub="Dados comerciais conectados ao pipeline." close={close}>
       <form onSubmit={submit} className="modalform">
         {[ ["company", "Empresa", lead?.company], ["contact", "Responsável", lead?.contact], ["email", "E-mail", lead?.email], ["phone", "Telefone", lead?.phone], ["segment", "Segmento", lead?.segment], ["value", "Valor estimado", lead?.value ?? 0], ["probability", "Probabilidade (%)", lead?.probability ?? 0], ["next", "Próxima ação", lead?.next]].map(([n, l, v]) => (
-          <label key={String(n)}>{l}<input name={String(n)} required={n === "company" || n === "contact"} type={n === "value" ? "number" : n === "probability" ? "number" : "text"} min={n === "value" || n === "probability" ? 0 : undefined} max={n === "probability" ? 100 : undefined} step={n === "value" ? "0.01" : "1"} defaultValue={v ?? ""} /></label>
+          <label key={String(n)}>{l}<input name={String(n)} required={n === "company" || n === "contact"} type={n === "email" ? "email" : n === "value" || n === "probability" ? "number" : "text"} min={n === "value" || n === "probability" ? 0 : undefined} max={n === "probability" ? 100 : undefined} step={n === "value" ? "0.01" : "1"} defaultValue={v ?? ""} /></label>
         ))}
         <label>Próximo contato<input name="date" type="date" defaultValue={lead?.date || ""} /></label>
         <label>Origem
@@ -819,7 +852,7 @@ function LeadForm({ lead, close, save }: { lead: Lead | null; close: () => void;
         </label>
         <footer>
           <Btn plain onClick={close}>Cancelar</Btn>
-          <Btn type="submit">Salvar lead</Btn>
+          <Btn type="submit" disabled={saving}>{saving ? "Salvando..." : "Salvar lead"}</Btn>
         </footer>
       </form>
     </Modal>
@@ -828,14 +861,16 @@ function LeadForm({ lead, close, save }: { lead: Lead | null; close: () => void;
 function QuickForm({ type, close, save }: { type: "task" | "expense"; close: () => void; save: (a: string, b: string) => void }) {
   const [a, setA] = useState("");
   const [b, setB] = useState("");
+  const [saving, setSaving] = useState(false);
+  const submitting = useRef(false);
   return (
     <Modal title={type === "task" ? "Nova tarefa" : "Nova despesa"} sub="O registro fica salvo no banco." close={close}>
-      <form className="modalform" onSubmit={(e) => { e.preventDefault(); save(a, b); }}>
+      <form className="modalform" onSubmit={async (e) => { e.preventDefault(); if (submitting.current) return; submitting.current = true; setSaving(true); try { await save(a, b); } finally { submitting.current = false; setSaving(false); } }}>
         <label>{type === "task" ? "Título" : "Descrição"}<input value={a} onChange={(e) => setA(e.target.value)} required /></label>
         <label>{type === "task" ? "Vínculo" : "Valor (R$)"}<input value={b} onChange={(e) => setB(e.target.value)} required /></label>
         <footer>
           <Btn plain onClick={close}>Cancelar</Btn>
-          <Btn type="submit">{type === "task" ? "Criar tarefa" : "Registrar despesa"}</Btn>
+          <Btn type="submit" disabled={saving}>{saving ? "Salvando..." : type === "task" ? "Criar tarefa" : "Registrar despesa"}</Btn>
         </footer>
       </form>
     </Modal>
@@ -887,11 +922,43 @@ function SettingsPage({ notify, user, logout }: { notify: (s: string) => void; u
             />
           )}
           {tab === "Notificações" && <NotifySettings />}
-          {tab === "Segurança" && <PasswordPanel notify={notify} logout={logout} />}
+          {tab === "Segurança" && <><PasswordPanel notify={notify} logout={logout} /><AuthenticatorPanel notify={notify} /></>}
         </article>
       </div>
     </>
   );
+}
+
+function AuthenticatorPanel({ notify }: { notify: (s: string) => void }) {
+  const [enabled, setEnabled] = useState(false);
+  const [secret, setSecret] = useState("");
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.authenticatorStatus().then((s) => setEnabled(s.enabled)).catch(() => undefined); }, []);
+  const setup = async () => {
+    setBusy(true);
+    try { const result = await api.authenticatorSetup(); setSecret(result.secret); }
+    catch (err) { notify(err instanceof Error ? err.message : "Não foi possível iniciar a configuração"); }
+    finally { setBusy(false); }
+  };
+  const verify = async (e: FormEvent) => {
+    e.preventDefault(); setBusy(true);
+    try { await api.authenticatorVerify(code); setEnabled(true); setSecret(""); setCode(""); notify("Autenticador ativado"); }
+    catch (err) { notify(err instanceof Error ? err.message : "Código inválido"); }
+    finally { setBusy(false); }
+  };
+  const disable = async (e: FormEvent) => {
+    e.preventDefault(); setBusy(true);
+    try { await api.authenticatorDisable(password, code); setEnabled(false); setPassword(""); setCode(""); notify("Autenticador desativado"); }
+    catch (err) { notify(err instanceof Error ? err.message : "Não foi possível desativar"); }
+    finally { setBusy(false); }
+  };
+  return <section className="authenticator-panel"><div className="authenticator-heading"><ShieldCheck size={20} /><span><h2>Aplicativo autenticador</h2><p>Adicione uma segunda etapa de proteção ao entrar.</p></span><b className={enabled ? "security-state on" : "security-state"}>{enabled ? "Ativado" : "Desativado"}</b></div>
+    {!enabled && !secret && <button className="btn plain" type="button" onClick={setup} disabled={busy}>{busy ? "Preparando..." : "Configurar autenticador"}</button>}
+    {!enabled && secret && <form className="userform" onSubmit={verify}><p>Adicione esta chave manualmente no Google Authenticator, Microsoft Authenticator ou app compatível:</p><code className="totp-secret">{secret}</code><label>Código de 6 dígitos<input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" pattern="[0-9]{6}" required /></label><button className="btn" type="submit" disabled={busy}>{busy ? "Validando..." : "Ativar autenticação"}</button></form>}
+    {enabled && <form className="userform" onSubmit={disable}><p>Para desativar, confirme sua senha e um código atual do aplicativo.</p><label>Senha atual<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label><label>Código autenticador<input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" pattern="[0-9]{6}" required /></label><button className="btn plain" type="submit" disabled={busy}>{busy ? "Validando..." : "Desativar autenticador"}</button></form>}
+  </section>;
 }
 
 
@@ -900,19 +967,22 @@ function PasswordPanel({ notify, logout }: { notify: (s: string) => void; logout
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [saving, setSaving] = useState(false);
+  const submitting = useRef(false);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     if (next !== confirm) { notify("As novas senhas não coincidem"); return; }
     setSaving(true);
     try { await api.changePassword(current, next); notify("Senha alterada. Entre novamente."); logout(); }
     catch (err) { notify(err instanceof Error ? err.message : "Não foi possível alterar a senha"); }
-    finally { setSaving(false); }
+    finally { submitting.current = false; setSaving(false); }
   };
   return <form className="userform" onSubmit={submit}><h2>Senha e sessão</h2><p>Use pelo menos 12 caracteres com maiúscula, minúscula, número e símbolo.</p>
     <label>Senha atual<input type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} required /></label>
     <label>Nova senha<input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} minLength={12} required /></label>
     <label>Confirme a nova senha<input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} minLength={12} required /></label>
-    <Btn type="submit">{saving ? "Salvando..." : "Alterar senha"}</Btn>
+    <Btn type="submit" disabled={saving}>{saving ? "Salvando..." : "Alterar senha"}</Btn>
   </form>;
 }
 
@@ -981,7 +1051,7 @@ function CompanyForm({ notify }: { notify: (s: string) => void }) {
             Endereço
             <input value={address} onChange={(e) => setAddress(e.target.value)} />
           </label>
-          <Btn onClick={save}>{saving ? "Salvando..." : "Salvar alterações"}</Btn>
+          <Btn onClick={save} disabled={saving}>{saving ? "Salvando..." : "Salvar alterações"}</Btn>
         </>
       )}
     </>
@@ -1054,6 +1124,7 @@ function UsersPanel({ notify }: { notify: (s: string) => void }) {
       )}
       <form className="userform" onSubmit={create}>
         <h3>Novo usuário</h3>
+        <p>Use pelo menos 12 caracteres, com maiúscula, minúscula, número e símbolo.</p>
         <label>
           Nome
           <input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -1068,7 +1139,7 @@ function UsersPanel({ notify }: { notify: (s: string) => void }) {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            minLength={6}
+            minLength={12}
             required
           />
         </label>
@@ -1081,7 +1152,7 @@ function UsersPanel({ notify }: { notify: (s: string) => void }) {
             <option value="OPERACIONAL">Operacional</option>
           </select>
         </label>
-        <Btn type="submit">{saving ? "Salvando..." : "Criar usuário"}</Btn>
+        <Btn type="submit" disabled={saving}>{saving ? "Salvando..." : "Criar usuário"}</Btn>
       </form>
     </>
   );

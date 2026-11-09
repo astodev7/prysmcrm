@@ -44,7 +44,7 @@ export function setStoredUser(user: AuthUser | null) {
   else localStorage.removeItem("crm_user");
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function requestRaw<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, auth = true } = options;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -75,6 +75,19 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   return data as T;
+}
+
+const inflightGets = new Map<string, Promise<unknown>>();
+const inflightWrites = new Map<string, Promise<unknown>>();
+function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = (options.method ?? "GET").toUpperCase();
+  const identity = `${getToken() ?? "cookie"}:${method}:${path}:${method === "GET" ? "" : JSON.stringify(options.body ?? null)}`;
+  const inflight = method === "GET" ? inflightGets : inflightWrites;
+  const pending = inflight.get(identity);
+  if (pending) return pending as Promise<T>;
+  const requestPromise = requestRaw<T>(path, options).finally(() => inflight.delete(identity));
+  inflight.set(identity, requestPromise);
+  return requestPromise;
 }
 
 // ===== Types (backend shape) =====
@@ -181,16 +194,20 @@ export type ApiUser = {
 
 // ===== Auth =====
 export const api = {
-  login: (email: string, password: string) =>
-    request<{ user: AuthUser; token?: string }>("/auth/login", {
+  login: (email: string, password: string, authenticatorCode?: string) =>
+    request<{ user?: AuthUser; token?: string; otpRequired?: boolean }>("/auth/login", {
       method: "POST",
-      body: { email, password },
+      body: { email, password, authenticatorCode },
       auth: false,
     }),
 
   me: () => request<AuthUser>("/auth/me"),
-  logout: () => getToken() ? Promise.resolve() : request<void>("/auth/logout", { method: "POST" }),
+  logout: () => request<void>("/auth/logout", { method: "POST" }),
   changePassword: (currentPassword: string, newPassword: string) => request<{ message: string }>("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
+  authenticatorStatus: () => request<{ enabled: boolean }>("/auth/authenticator"),
+  authenticatorSetup: () => request<{ secret: string; otpauthUrl: string }>("/auth/authenticator/setup", { method: "POST" }),
+  authenticatorVerify: (code: string) => request<{ enabled: boolean }>("/auth/authenticator/verify", { method: "POST", body: { code } }),
+  authenticatorDisable: (password: string, code: string) => request<{ enabled: boolean }>("/auth/authenticator/disable", { method: "POST", body: { password, code } }),
 
   // Leads
   getLeads: (params?: { status?: string; search?: string }) => {

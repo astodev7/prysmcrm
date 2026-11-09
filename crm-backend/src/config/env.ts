@@ -20,6 +20,7 @@ const envSchema = z.object({
   ),
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32),
+  TOTP_ENCRYPTION_KEY: z.preprocess(emptyToUndefined, z.string().min(32).optional()),
   BOOTSTRAP_ADMIN_SECRET: z.preprocess(emptyToUndefined, z.string().min(32).optional()),
   JWT_EXPIRES_IN: z.preprocess(emptyToUndefined, z.string().default("7d")),
   BCRYPT_SALT_ROUNDS: z.preprocess(

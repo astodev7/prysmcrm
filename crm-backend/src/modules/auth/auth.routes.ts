@@ -4,10 +4,12 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../../config/prisma.js";
 import { env } from "../../config/env.js";
 import { AppError } from "../../utils/errors.js";
+import { decryptTotp, encryptTotp, newTotpSecret, verifyTotp } from "./totp.js";
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  authenticatorCode: z.string().optional(),
 });
 
 const attempts = new Map<string, { count: number; since: number }>();
@@ -44,6 +46,11 @@ export async function authRoutes(app: FastifyInstance) {
       attempts.set(key, { count: (attempts.get(key)?.count ?? 0) + 1, since: attempts.get(key)?.since ?? now });
       throw new AppError("E-mail ou senha inválidos", 401);
     }
+    if (user.totpEnabled && !body.authenticatorCode) return reply.send({ otpRequired: true });
+    if (user.totpEnabled && (!user.totpSecret || !verifyTotp(decryptTotp(user.totpSecret), body.authenticatorCode!))) {
+      attempts.set(key, { count: (attempts.get(key)?.count ?? 0) + 1, since: attempts.get(key)?.since ?? now });
+      throw new AppError("Código autenticador inválido", 401);
+    }
     attempts.delete(key);
 
     const token = app.jwt.sign({ sub: user.id, role: user.role, ver: user.authVersion }, { expiresIn: "15m" });
@@ -58,6 +65,37 @@ export async function authRoutes(app: FastifyInstance) {
         role: user.role,
       },
     });
+  });
+
+  app.get("/authenticator", { onRequest: [app.authenticate] }, async (request) => {
+    const user = await prisma.user.findUnique({ where: { id: request.user.sub }, select: { totpEnabled: true } });
+    return { enabled: Boolean(user?.totpEnabled) };
+  });
+
+  app.post("/authenticator/setup", { onRequest: [app.authenticate] }, async (request) => {
+    const user = await prisma.user.findUnique({ where: { id: request.user.sub }, select: { email: true, totpEnabled: true } });
+    if (!user) throw new AppError("Usuário não encontrado", 404);
+    if (user.totpEnabled) throw new AppError("Autenticador já está ativado", 400);
+    const secret = newTotpSecret();
+    await prisma.user.update({ where: { id: request.user.sub }, data: { totpSecret: encryptTotp(secret) } });
+    const issuer = "Prysm CRM";
+    return { secret, otpauthUrl: `otpauth://totp/${encodeURIComponent(`${issuer}:${user.email}`)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30` };
+  });
+
+  app.post("/authenticator/verify", { onRequest: [app.authenticate] }, async (request) => {
+    const { code } = z.object({ code: z.string().regex(/^\d{6}$/) }).parse(request.body);
+    const user = await prisma.user.findUnique({ where: { id: request.user.sub }, select: { totpSecret: true, totpEnabled: true } });
+    if (!user?.totpSecret || user.totpEnabled || !verifyTotp(decryptTotp(user.totpSecret), code)) throw new AppError("Código inválido", 400);
+    await prisma.user.update({ where: { id: request.user.sub }, data: { totpEnabled: true } });
+    return { enabled: true };
+  });
+
+  app.post("/authenticator/disable", { onRequest: [app.authenticate] }, async (request) => {
+    const { password, code } = z.object({ password: z.string().min(1), code: z.string().regex(/^\d{6}$/) }).parse(request.body);
+    const user = await prisma.user.findUnique({ where: { id: request.user.sub } });
+    if (!user || !(await bcrypt.compare(password, user.password)) || !user.totpSecret || !verifyTotp(decryptTotp(user.totpSecret), code)) throw new AppError("Senha ou código inválido", 400);
+    await prisma.user.update({ where: { id: user.id }, data: { totpSecret: null, totpEnabled: false } });
+    return { enabled: false };
   });
 
   // POST /auth/register (somente ADMIN ou primeiro usuário)

@@ -169,6 +169,7 @@ export async function leadsRoutes(app: FastifyInstance) {
                 phone: lead.phone,
                 value: lead.value,
                 leadId: lead.id,
+                ownerId: lead.ownerId,
               },
             });
           }
