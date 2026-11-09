@@ -16,8 +16,17 @@ class ApiError extends Error {
   }
 }
 
-export function setToken(_token: string | null) {
-  localStorage.removeItem("crm_token");
+// The new API uses HttpOnly cookies. Keep a short-lived compatibility token
+// in sessionStorage while an older deployed API still returns Bearer JWTs.
+localStorage.removeItem("crm_token");
+
+function getToken(): string | null {
+  return sessionStorage.getItem("crm_token");
+}
+
+export function setToken(token: string | null) {
+  if (token) sessionStorage.setItem("crm_token", token);
+  else sessionStorage.removeItem("crm_token");
 }
 
 export function getStoredUser(): AuthUser | null {
@@ -41,7 +50,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     "Content-Type": "application/json",
   };
 
-  void auth;
+  if (auth) {
+    const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
 
   const res = await fetch(`${API_URL}${path}`, {
     method,
@@ -170,14 +182,14 @@ export type ApiUser = {
 // ===== Auth =====
 export const api = {
   login: (email: string, password: string) =>
-    request<{ user: AuthUser }>("/auth/login", {
+    request<{ user: AuthUser; token?: string }>("/auth/login", {
       method: "POST",
       body: { email, password },
       auth: false,
     }),
 
   me: () => request<AuthUser>("/auth/me"),
-  logout: () => request<void>("/auth/logout", { method: "POST" }),
+  logout: () => getToken() ? Promise.resolve() : request<void>("/auth/logout", { method: "POST" }),
   changePassword: (currentPassword: string, newPassword: string) => request<{ message: string }>("/auth/change-password", { method: "POST", body: { currentPassword, newPassword } }),
 
   // Leads

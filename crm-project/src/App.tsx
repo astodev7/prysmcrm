@@ -99,7 +99,7 @@ const nav: [Page, typeof LayoutDashboard][] = [
   ["Configurações", Settings],
 ];
 
-function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void | Promise<void> }) {
+function LoginPage({ onLogin }: { onLogin: (user: AuthUser, token?: string) => void | Promise<void> }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -111,7 +111,7 @@ function LoginPage({ onLogin }: { onLogin: (user: AuthUser) => void | Promise<vo
     setLoading(true);
     try {
       const res = await api.login(email, password);
-      await onLogin(res.user);
+      await onLogin(res.user, res.token);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha no login");
     } finally {
@@ -211,7 +211,8 @@ export default function App() {
     }
   }, [user?.role]);
 
-  const handleLogin = async (u: AuthUser) => {
+  const handleLogin = async (u: AuthUser, token?: string) => {
+    setToken(token ?? null);
     setStoredUser(u);
     setUser(u);
     const [l, c, p, t, f] = await Promise.all([
@@ -226,7 +227,6 @@ export default function App() {
 
   useEffect(() => {
     const init = async () => {
-      setToken(null); // remove any bearer token saved by the previous localStorage session
       const stored = getStoredUser();
       if (!stored) {
         setBooting(false);
