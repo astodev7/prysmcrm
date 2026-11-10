@@ -1499,3 +1499,7 @@ td > small, .entity small { font-size: 11px; }
   .modalform { padding: 18px; }
   .content { max-width: 100%; }
 }
+.modalform textarea { width: 100%; min-height: 100px; margin-top: 6px; padding: 10px; resize: vertical; border: 1px solid rgba(139,124,199,.35); border-radius: 8px; background: rgba(14,11,29,.62); color: #C9C2E3; }
+.modalform label.checkline { display: flex; grid-column: 1 / -1; align-items: flex-start; gap: 10px; }
+.modalform label.checkline input { display: inline-block; width: 18px; min-width: 18px; height: 18px; min-height: 18px; margin: 2px 0 0; }
+.modalform > .note { grid-column: 1 / -1; }

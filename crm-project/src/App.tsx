@@ -171,11 +171,14 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [money, setMoney] = useState<Money[]>([]);
+  const [financeSummary, setFinanceSummary] = useState<import("./lib/api").ApiFinanceSummary | null>(null);
+  const [openSales, setOpenSales] = useState<import("./lib/api").ApiOpenSale[]>([]);
   const [followUps, setFollowUps] = useState<import("./lib/api").ApiFollowUp[]>([]);
   const [proposals, setProposals] = useState<import("./lib/api").ApiProposal[]>([]);
-  const [modal, setModal] = useState<"lead" | "task" | "expense" | null>(null);
+  const [modal, setModal] = useState<"lead" | "task" | "expense" | "project" | null>(null);
   const [editing, setEditing] = useState<Lead | null>(null);
   const [remove, setRemove] = useState<Lead | null>(null);
+  const [reversingSale, setReversingSale] = useState<Lead | null>(null);
   const [historyLead, setHistoryLead] = useState<Lead | null>(null);
   const [toast, setToast] = useState("");
   const [deletingLead, setDeletingLead] = useState(false);
@@ -196,6 +199,8 @@ export default function App() {
     setProjects([]);
     setTasks([]);
     setMoney([]);
+    setFinanceSummary(null);
+    setOpenSales([]);
   };
 
   const loadData = useCallback(async () => {
@@ -205,18 +210,22 @@ export default function App() {
       const canSales = role === "ADMIN" || role === "COMERCIAL";
       const canOperations = role === "ADMIN" || role === "OPERACIONAL";
       const canFinance = role === "ADMIN" || role === "FINANCEIRO";
-      const [leadsRes, clientsRes, projectsRes, tasksRes, financeRes] = await Promise.all([
+      const [leadsRes, clientsRes, projectsRes, tasksRes, financeRes, financeSummaryRes, openSalesRes] = await Promise.all([
         canSales ? api.getLeads() : Promise.resolve([]),
         canSales || canOperations ? api.getClients() : Promise.resolve([]),
         canOperations ? api.getProjects() : Promise.resolve([]),
         canSales || canOperations ? api.getTasks() : Promise.resolve([]),
         canFinance ? api.getFinance() : Promise.resolve([]),
+        canFinance ? api.financeSummary() : Promise.resolve(null),
+        canFinance ? api.getOpenSales() : Promise.resolve([]),
       ]);
       setLeads(leadsRes.map(mapLead));
       setClients(clientsRes.map(mapClient));
       setProjects(projectsRes.map(mapProject));
       setTasks(tasksRes.map(mapTask));
       setMoney(financeRes.map(mapFinance));
+      setFinanceSummary(financeSummaryRes);
+      setOpenSales(openSalesRes);
       if (canSales) {
         const [followUpRows, proposalRows] = await Promise.all([api.getFollowUps(), api.getProposals()]);
         setFollowUps(followUpRows); setProposals(proposalRows);
@@ -282,6 +291,7 @@ export default function App() {
         const created = await api.createLead(mapLeadToApi(x));
         setLeads((v) => [mapLead(created), ...v]);
       }
+      if (x.status === "Ganho") await loadData();
       setModal(null);
       notify("Lead salvo com sucesso");
       return true;
@@ -307,6 +317,19 @@ export default function App() {
     } finally {
       writeLocks.current.delete("delete:" + lead.id);
       setDeletingLead(false);
+    }
+  };
+
+  const reverseSale = async (lead: Lead, reason: string, refundConfirmed: boolean): Promise<boolean> => {
+    try {
+      await api.reverseSale(lead.id, { reason, refundConfirmed, idempotencyKey: crypto.randomUUID() });
+      await loadData();
+      setReversingSale(null);
+      notify("Venda revertida; histórico e pagamentos preservados");
+      return true;
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível reverter a venda");
+      return false;
     }
   };
 
@@ -337,7 +360,7 @@ export default function App() {
     }
   };
 
-  const createExpense = async (name: string, value: string): Promise<boolean> => {
+  const createExpense = async (name: string, value: string, dueDate?: string, idempotencyKey?: string, category?: string): Promise<boolean> => {
     if (writeLocks.current.has("expense")) return false;
     writeLocks.current.add("expense");
     try {
@@ -347,9 +370,12 @@ export default function App() {
         kind: "DESPESA",
         status: "PENDENTE",
         relation: "Operacional",
-        category: "Operacional",
+        category: category || "Operacional",
+        dueDate: dueDate ? new Date(`${dueDate}T12:00:00`).toISOString() : null,
+        idempotencyKey: idempotencyKey ?? crypto.randomUUID(),
       });
       setMoney((v) => [mapFinance(created), ...v]);
+      await loadData();
       setModal(null);
       notify("Despesa registrada");
       return true;
@@ -361,13 +387,38 @@ export default function App() {
     }
   };
 
+  const createProject = async (data: { name: string; clientId: string; value: number; deadline?: string }): Promise<boolean> => {
+    if (writeLocks.current.has("project")) return false;
+    writeLocks.current.add("project");
+    try {
+      await api.createProject({ ...data, status: "ORCAMENTO", progress: 0, deadline: data.deadline ? new Date(`${data.deadline}T12:00:00`).toISOString() : null });
+      await loadData();
+      setModal(null);
+      notify("Projeto criado");
+      return true;
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Erro ao criar projeto");
+      return false;
+    } finally { writeLocks.current.delete("project"); }
+  };
+
   const changeFinanceStatus = async (item: Money, status: string) => {
     const codes: Record<string, string> = { Pendente: "PENDENTE", Pago: "PAGO", Atrasado: "ATRASADO", Cancelado: "CANCELADO" };
     try {
       const updated = await api.updateFinance(item.id, { status: codes[status] });
       setMoney((items) => items.map((x) => x.id === item.id ? mapFinance(updated) : x));
+      await loadData();
       notify("Status financeiro atualizado");
     } catch (e) { notify(e instanceof Error ? e.message : "Não foi possível atualizar o status"); }
+  };
+
+  const changeFinanceDueDate = async (item: Money, dueDate: string) => {
+    try {
+      const updated = await api.updateFinance(item.id, { dueDate: dueDate ? new Date(`${dueDate}T12:00:00`).toISOString() : null });
+      setMoney((items) => items.map((x) => x.id === item.id ? mapFinance(updated) : x));
+      await loadData();
+      notify("Vencimento atualizado");
+    } catch (error) { notify(error instanceof Error ? error.message : "Não foi possível atualizar o vencimento"); }
   };
 
   const result = useMemo(
@@ -458,16 +509,16 @@ export default function App() {
         <section className="content">
           {page === "Dashboard" && <Dashboard leads={leads} money={money} tasks={tasks} projects={projects} go={setPage} userName={user.name.split(" ")[0]} />}
           {page === "Leads" && (
-            <Leads leads={leads} move={move} edit={(x) => { setEditing(x); setModal("lead"); }} add={() => { setEditing(null); setModal("lead"); }} remove={setRemove} history={setHistoryLead} />
+            <Leads leads={leads} move={move} edit={(x) => { setEditing(x); setModal("lead"); }} add={() => { setEditing(null); setModal("lead"); }} remove={setRemove} history={setHistoryLead} reverse={setReversingSale} canReverse={user.role === "ADMIN"} />
           )}
           {page === "Pipeline" && <Pipeline leads={leads} move={move} add={() => setModal("lead")} />}
           {page === "Acompanhamento" && <FollowUpCenter leads={leads} rows={followUps} refresh={loadData} notify={notify} />}
           {page === "Propostas" && <ProposalCenter leads={leads} rows={proposals} refresh={loadData} notify={notify} />}
           {page === "Clientes" && <Clients clients={clients} projects={projects} />}
-          {page === "Projetos" && <Projects projects={projects} clients={clients} />}
+          {page === "Projetos" && <Projects projects={projects} clients={clients} add={user.role === "ADMIN" || user.role === "OPERACIONAL" ? () => setModal("project") : undefined} />}
           {page === "Tarefas" && <Tasks tasks={tasks} onToggle={toggleTask} add={() => setModal("task")} />}
-          {page === "Financeiro" && <Finance money={money} clients={clients} onStatus={changeFinanceStatus} />}
-          {page === "Despesas" && <Expenses money={money} add={() => setModal("expense")} onStatus={changeFinanceStatus} />}
+          {page === "Financeiro" && <Finance money={money} summary={financeSummary} openSales={openSales} onStatus={changeFinanceStatus} onDueDate={changeFinanceDueDate} refresh={loadData} notify={notify} />}
+          {page === "Despesas" && <Expenses money={money} add={() => setModal("expense")} onStatus={changeFinanceStatus} onDueDate={changeFinanceDueDate} />}
           {page === "Relatórios" && <Reports leads={leads} money={money} />}
           {page === "Configurações" && <SettingsPage notify={notify} user={user} logout={handleLogout} />}
         </section>
@@ -475,7 +526,9 @@ export default function App() {
       {modal === "lead" && <LeadForm lead={editing} close={() => setModal(null)} save={saveLead} />}
       {modal === "task" && <QuickForm type="task" close={() => setModal(null)} save={createTask} />}
       {modal === "expense" && <QuickForm type="expense" close={() => setModal(null)} save={createExpense} />}
+      {modal === "project" && <ProjectForm clients={clients} close={() => setModal(null)} save={createProject} />}
       {historyLead && <ActivityTimeline lead={historyLead} close={() => setHistoryLead(null)} notify={notify} />}
+      {reversingSale && <ReverseSaleForm lead={reversingSale} close={() => setReversingSale(null)} save={(reason, confirmed) => reverseSale(reversingSale, reason, confirmed)} />}
       {remove && (
         <Modal title="Excluir lead?" sub={`Esta ação removerá ${remove.company} do CRM.`} close={() => setRemove(null)}>
           <div className="confirm">
@@ -538,11 +591,29 @@ function Dashboard({ leads, money, tasks, projects, go, userName }: { leads: Lea
   }) : money;
   const rec = periodMoney.filter((x) => x.kind === "receita" && x.status === "Pago").reduce((s, x) => s + x.value, 0);
   const exp = periodMoney.filter((x) => x.kind === "despesa" && x.status === "Pago").reduce((s, x) => s + x.value, 0);
-  const receivable = periodMoney.filter((x) => x.kind === "receita" && ["Pendente", "Atrasada"].includes(x.status)).reduce((s, x) => s + x.value, 0);
-  const pendingExpense = periodMoney.filter((x) => x.kind === "despesa" && ["Pendente", "Atrasada"].includes(x.status)).reduce((s, x) => s + x.value, 0);
+  const receivableOther = periodMoney.filter((x) => x.kind === "receita" && !x.saleId && ["Pendente", "Atrasado"].includes(x.status)).reduce((s, x) => s + x.value, 0);
+  const receivablesOverdueOther = periodMoney.filter((x) => x.kind === "receita" && !x.saleId && x.status === "Atrasado").reduce((s, x) => s + x.value, 0);
+  const receivablesPendingOther = periodMoney.filter((x) => x.kind === "receita" && !x.saleId && x.status === "Pendente").reduce((s, x) => s + x.value, 0);
+  const pendingExpense = periodMoney.filter((x) => x.kind === "despesa" && ["Pendente", "Atrasado"].includes(x.status)).reduce((s, x) => s + x.value, 0);
   const pipe = periodLeads.filter((x) => !["Ganho", "Perdido"].includes(x.status)).reduce((s, x) => s + x.value, 0);
-  const won = periodLeads.filter((x) => x.status === "Ganho");
-  const sales = won.reduce((s, x) => s + x.value, 0);
+  const periodSales = leads.filter((x) => x.status === "Ganho" && (!x.soldAt || period === "Todo período" || new Date(x.soldAt).getTime() >= cutoff));
+  const won = periodSales;
+  const sales = won.reduce((s, x) => s + (x.contractAmount ?? x.value), 0);
+  const contractReceivables = leads.filter((x) => x.status === "Ganho").filter((sale) => {
+    const contract = money.find((x) => x.saleId === sale.saleId && x.category === "Contrato");
+    const refDate = contract?.dueDate || sale.soldAt;
+    return period === "Todo período" || !refDate || new Date(refDate).getTime() >= cutoff;
+  }).map((sale) => {
+    const contract = money.find((x) => x.saleId === sale.saleId && x.category === "Contrato");
+    const received = sale.saleId ? money.filter((x) => x.kind === "receita" && x.status === "Pago" && x.saleId === sale.saleId).reduce((paid, x) => paid + x.value, 0) : 0;
+    const balance = Math.max(0, (sale.contractAmount ?? sale.value) - received);
+    const overdue = balance > 0 && (contract?.status === "Atrasado" || Boolean(contract?.dueDate && new Date(contract.dueDate).getTime() < Date.now()));
+    return { balance, overdue };
+  });
+  const receivableContracts = contractReceivables.reduce((sum, sale) => sum + sale.balance, 0);
+  const receivablesOverdueContracts = contractReceivables.filter((sale) => sale.overdue).reduce((sum, sale) => sum + sale.balance, 0);
+  const receivablesPendingContracts = receivableContracts - receivablesOverdueContracts;
+  const receivable = receivableOther + receivableContracts;
   const conv = periodLeads.length ? Math.round((won.length / periodLeads.length) * 100) : 0;
   return (
     <>
@@ -552,12 +623,13 @@ function Dashboard({ leads, money, tasks, projects, go, userName }: { leads: Lea
       </Head>
       <div className="metrics">
         <Metric name="Pipeline ativo" value={brl(pipe)} Icon={Target} />
-        <Metric name="Vendas fechadas" value={brl(sales)} Icon={BriefcaseBusiness} />
+        <Metric name="Vendas fechadas" value={String(won.length)} Icon={BriefcaseBusiness} />
+        <Metric name="Valor vendido" value={brl(sales)} Icon={BriefcaseBusiness} />
         <Metric name="Receita recebida" value={brl(rec)} Icon={CircleDollarSign} />
         <Metric name="Lucro realizado" value={brl(rec - exp)} Icon={TrendingUp} />
         <Metric name="Taxa de conversão" value={`${conv}%`} Icon={BarChart3} />
       </div>
-      <div className="strip"><span>A receber<b>{brl(receivable)}</b></span><span>Despesas pagas<b>{brl(exp)}</b></span><span>Despesas pendentes<b>{brl(pendingExpense)}</b></span><span>Ticket médio<b>{brl(won.length ? sales / won.length : 0)}</b></span></div>
+      <div className="strip"><span>A receber<b>{brl(receivable)}</b></span><span>Recebimentos pendentes<b>{brl(receivablesPendingOther + receivablesPendingContracts)}</b></span><span>Recebimentos atrasados<b>{brl(receivablesOverdueOther + receivablesOverdueContracts)}</b></span><span>Despesas pagas<b>{brl(exp)}</b></span><span>Despesas pendentes<b>{brl(pendingExpense)}</b></span><span>Ticket médio<b>{brl(won.length ? sales / won.length : 0)}</b></span></div>
       <div className="dash">
         <article className="panel chart">
           <PanelHead title="Desempenho financeiro" sub="Pagamentos confirmados no período" />
@@ -612,7 +684,7 @@ function Dashboard({ leads, money, tasks, projects, go, userName }: { leads: Lea
 function Clock() {
   return <i className="clock"><CalendarDays size={14} /></i>;
 }
-function Leads({ leads, edit, add, remove, history }: { leads: Lead[]; move: (id: string, status: Status) => void; edit: (l: Lead) => void; add: () => void; remove: (l: Lead) => void; history: (l: Lead) => void }) {
+function Leads({ leads, edit, add, remove, history, reverse, canReverse }: { leads: Lead[]; move: (id: string, status: Status) => void; edit: (l: Lead) => void; add: () => void; remove: (l: Lead) => void; history: (l: Lead) => void; reverse: (l: Lead) => void; canReverse: boolean }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("Todos");
   const [source, setSource] = useState("");
@@ -631,12 +703,12 @@ function Leads({ leads, edit, add, remove, history }: { leads: Lead[]; move: (id
           </select>
           <select value={source} onChange={(e) => setSource(e.target.value)} aria-label="Filtrar por origem"><option value="">Todas as origens</option>{[...new Set(leads.map((x) => x.source).filter(Boolean))].map((item) => <option key={item}>{item}</option>)}</select>
         </div>
-        <Table leads={filtered} edit={edit} remove={remove} history={history} />
+        <Table leads={filtered} edit={edit} remove={remove} history={history} reverse={reverse} canReverse={canReverse} />
       </article>
     </>
   );
 }
-function Table({ leads, edit, remove, history }: { leads: Lead[]; edit: (l: Lead) => void; remove: (l: Lead) => void; history: (l: Lead) => void }) {
+function Table({ leads, edit, remove, history, reverse, canReverse }: { leads: Lead[]; edit: (l: Lead) => void; remove: (l: Lead) => void; history: (l: Lead) => void; reverse: (l: Lead) => void; canReverse: boolean }) {
   return (
     <div className="scroll">
       <table>
@@ -652,6 +724,7 @@ function Table({ leads, edit, remove, history }: { leads: Lead[]; edit: (l: Lead
               <td><strong>{brl(x.value)}</strong><small>{x.probability}% prob.</small></td>
               <td>
                 <button type="button" onClick={() => history(x)}>Histórico</button>
+                {canReverse && x.status === "Ganho" && <button type="button" onClick={() => reverse(x)}>Reverter venda</button>}
                 <button type="button" onClick={() => edit(x)}>Editar</button>
                 <button type="button" onClick={() => remove(x)} aria-label={"Excluir lead " + x.company} title="Excluir lead"><Trash2 size={14} /></button>
               </td>
@@ -664,19 +737,20 @@ function Table({ leads, edit, remove, history }: { leads: Lead[]; edit: (l: Lead
 }
 function Pipeline({ leads, move, add }: { leads: Lead[]; move: (id: string, status: Status) => void; add: () => void }) {
   const active = leads.filter((x) => !["Ganho", "Perdido"].includes(x.status));
+  const openStages = stages.filter((stage) => stage !== "Ganho" && stage !== "Perdido");
   return (
     <>
       <Head k="COMERCIAL" title="Pipeline de vendas" sub="Arraste oportunidades entre etapas para atualizar o funil.">
         <Btn onClick={add}><Plus size={16} /> Nova oportunidade</Btn>
       </Head>
       <div className="kanban">
-        {stages.map((s) => (
+        {openStages.map((s) => (
           <section key={s} onDragOver={(e) => e.preventDefault()} onDrop={(e) => move(e.dataTransfer.getData("id"), s)}>
             <header>
-              <strong>{s}<em>{leads.filter((x) => x.status === s).length}</em></strong>
-              <span>{brl(leads.filter((x) => x.status === s).reduce((a, x) => a + x.value, 0))}</span>
+              <strong>{s}<em>{active.filter((x) => x.status === s).length}</em></strong>
+              <span>{brl(active.filter((x) => x.status === s).reduce((a, x) => a + x.value, 0))}</span>
             </header>
-            {leads.filter((x) => x.status === s).map((x) => (
+            {active.filter((x) => x.status === s).map((x) => (
               <article draggable onDragStart={(e) => e.dataTransfer.setData("id", x.id)} key={x.id}>
                 <div><b>{x.company[0]}</b><span><strong>{x.company}</strong><small>{x.contact}</small></span></div>
                 <footer><em>{x.owner}</em><strong>{brl(x.value)}</strong></footer>
@@ -714,10 +788,10 @@ function Clients({ clients, projects }: { clients: Client[]; projects: Project[]
     </>
   );
 }
-function Projects({ projects, clients }: { projects: Project[]; clients: Client[] }) {
+function Projects({ projects, clients, add }: { projects: Project[]; clients: Client[]; add?: () => void }) {
   return (
     <>
-      <Head k="OPERAÇÃO" title="Projetos" sub={`${projects.length} projetos em gestão.`} />
+      <Head k="OPERAÇÃO" title="Projetos" sub={`${projects.length} projetos em gestão.`}>{add && <Btn onClick={add}><Plus size={16} /> Novo projeto</Btn>}</Head>
       <article className="panel">
         {projects.map((x) => (
           <div className="project" key={x.id}>
@@ -754,47 +828,107 @@ function Tasks({ tasks, onToggle, add }: { tasks: Task[]; onToggle: (t: Task) =>
     </>
   );
 }
-function Finance({ money, clients, onStatus }: { money: Money[]; clients: Client[]; onStatus: (item: Money, status: string) => void }) {
-  const rec = money.filter((x) => x.kind === "receita");
-  const exp = money.filter((x) => x.kind === "despesa");
+function Finance({ money, summary, openSales, onStatus, onDueDate, refresh, notify }: { money: Money[]; summary: import("./lib/api").ApiFinanceSummary | null; openSales: import("./lib/api").ApiOpenSale[]; onStatus: (item: Money, status: string) => void; onDueDate: (item: Money, dueDate: string) => void; refresh: () => Promise<void>; notify: (message: string) => void }) {
+  const [period, setPeriod] = useState<"30 dias" | "Todo período">("Todo período");
+  const [periodSummary, setPeriodSummary] = useState(summary);
+  const [periodSales, setPeriodSales] = useState(openSales);
+  const [periodBusy, setPeriodBusy] = useState(false);
+  const periodMoney = period === "30 dias" ? money.filter((item) => {
+    const referenceDate = item.status === "Pago" ? item.paidAt : item.dueDate || item.createdAt;
+    return !referenceDate || new Date(referenceDate).getTime() >= Date.now() - 30 * 24 * 60 * 60 * 1000;
+  }) : money;
+  const rec = periodMoney.filter((x) => x.kind === "receita");
+  const exp = periodMoney.filter((x) => x.kind === "despesa");
   const paid = rec.filter((x) => x.status === "Pago").reduce((s, x) => s + x.value, 0);
   const cost = exp.filter((x) => x.status === "Pago").reduce((s, x) => s + x.value, 0);
+  useEffect(() => {
+    let active = true;
+    if (period === "Todo período") { setPeriodSummary(summary); setPeriodSales(openSales); setPeriodBusy(false); return; }
+    setPeriodBusy(true);
+    const now = new Date(); const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    void Promise.all([api.financeSummary({ from: from.toISOString(), to: now.toISOString() }), api.getOpenSales({ from: from.toISOString(), to: now.toISOString() })])
+      .then(([nextSummary, nextSales]) => { if (active) { setPeriodSummary(nextSummary); setPeriodSales(nextSales); } })
+      .catch((error) => { if (active) notify(error instanceof Error ? error.message : "Não foi possível filtrar o financeiro"); })
+      .finally(() => { if (active) setPeriodBusy(false); });
+    return () => { active = false; };
+  }, [period, summary, openSales]);
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [paymentDates, setPaymentDates] = useState<Record<string, string>>({});
+  const [busySale, setBusySale] = useState("");
+  const paymentKeys = useRef(new Map<string, string>());
+  const paymentLocks = useRef(new Set<string>());
+  const recordPayment = async (sale: import("./lib/api").ApiOpenSale) => {
+    const amount = Number(amounts[sale.id]);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > sale.outstanding || paymentLocks.current.has(sale.id)) return;
+    paymentLocks.current.add(sale.id);
+    setBusySale(sale.id);
+    try {
+      const rounded = Math.round(amount * 100) / 100;
+      const paymentDate = paymentDates[sale.id] || "data-atual";
+      const key = `${sale.id}:${rounded}:${paymentDate}`;
+      const storageKey = `crm_payment_key:${key}`;
+      let idempotencyKey = paymentKeys.current.get(key) ?? sessionStorage.getItem(storageKey) ?? undefined;
+      if (!idempotencyKey) { idempotencyKey = crypto.randomUUID(); sessionStorage.setItem(storageKey, idempotencyKey); paymentKeys.current.set(key, idempotencyKey); }
+      const paidAt = paymentDates[sale.id] ? new Date(`${paymentDates[sale.id]}T12:00:00`).toISOString() : undefined;
+      await api.recordSalePayment(sale.id, rounded, idempotencyKey, paidAt);
+      paymentKeys.current.delete(key);
+      sessionStorage.removeItem(storageKey);
+      setAmounts((v) => ({ ...v, [sale.id]: "" }));
+      setPaymentDates((v) => ({ ...v, [sale.id]: "" }));
+      await refresh();
+      notify("Recebimento registrado e indicadores atualizados");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Falha ao registrar recebimento");
+    } finally { paymentLocks.current.delete(sale.id); setBusySale(""); }
+  };
   return (
     <>
-      <Head k="FINANCEIRO" title="Visão financeira" sub="Contrato, faturamento e caixa tratados separadamente." />
+      <Head k="FINANCEIRO" title="Visão financeira" sub="Contrato, faturamento e caixa tratados separadamente."><Btn plain disabled={periodBusy} onClick={() => setPeriod((p) => p === "30 dias" ? "Todo período" : "30 dias")}>{periodBusy ? "Atualizando…" : period}</Btn></Head>
       <div className="metrics four">
-        <Metric name="Total vendido" value={brl(clients.reduce((s, x) => s + x.value, 0))} Icon={BriefcaseBusiness} />
-        <Metric name="Efetivamente recebido" value={brl(paid)} Icon={CircleDollarSign} />
-        <Metric name="Despesas pagas" value={brl(cost)} Icon={WalletCards} />
-        <Metric name="Lucro realizado" value={brl(paid - cost)} Icon={TrendingUp} />
+        <Metric name="Vendas fechadas" value={String(periodSummary?.quantidadeVendas ?? 0)} Icon={BriefcaseBusiness} />
+        <Metric name="Valor vendido" value={brl(periodSummary?.vendasFechadas ?? 0)} Icon={BriefcaseBusiness} />
+        <Metric name="Receita recebida" value={brl(periodSummary?.totalReceitas ?? paid)} Icon={CircleDollarSign} />
+        <Metric name="Despesas pagas" value={brl(periodSummary?.totalDespesas ?? cost)} Icon={WalletCards} />
+        <Metric name="Lucro realizado" value={brl(periodSummary?.lucroRealizado ?? paid - cost)} Icon={TrendingUp} />
       </div>
-      <MoneyTable data={rec} onStatus={onStatus} />
+      <div className="strip"><span>A receber<b>{brl(periodSummary?.valoresAReceber ?? 0)}</b></span><span>Recebimentos pendentes<b>{brl(periodSummary?.recebiveisPendentes ?? 0)}</b></span><span>Recebimentos atrasados<b>{brl(periodSummary?.recebiveisAtrasados ?? 0)}</b></span><span>Despesas pendentes<b>{brl(periodSummary?.despesasPendentes ?? 0)}</b></span><span>Lucro projetado<b>{brl(periodSummary?.lucroProjetado ?? 0)}</b></span><span>Ticket médio<b>{brl(periodSummary?.quantidadeVendas ? (periodSummary.vendasFechadas / periodSummary.quantidadeVendas) : 0)}</b></span></div>
+      <article className="panel table">
+        <PanelHead title="Contratos a receber" sub="Registre recebimentos totais ou parciais; cada parcela fica no histórico do contrato." />
+        <div className="scroll"><table><thead><tr><th>CLIENTE</th><th>CONTRATADO</th><th>RECEBIDO</th><th>SALDO</th><th>REGISTRAR PARCELA</th></tr></thead><tbody>
+          {periodSales.map((sale) => <tr key={sale.id}><td>{sale.company}<small>Venda em {new Date(sale.soldAt).toLocaleDateString("pt-BR")}</small></td><td>{brl(sale.contractAmount)}</td><td>{brl(sale.received)}</td><td>{brl(sale.outstanding)}<small>{sale.overdue ? "Pagamento atrasado" : sale.dueDate ? `Vence em ${new Date(sale.dueDate).toLocaleDateString("pt-BR")}` : "Sem vencimento"}</small></td><td><div className="tools"><input aria-label={`Valor da parcela para ${sale.company}`} type="number" min="0.01" max={sale.outstanding} step="0.01" value={amounts[sale.id] ?? ""} onChange={(e) => setAmounts((v) => ({ ...v, [sale.id]: e.target.value }))} placeholder="R$" /><input aria-label={`Data de recebimento para ${sale.company}`} type="date" value={paymentDates[sale.id] ?? ""} onChange={(e) => setPaymentDates((v) => ({ ...v, [sale.id]: e.target.value }))} /><Btn disabled={busySale === sale.id || !amounts[sale.id] || Number(amounts[sale.id]) > sale.outstanding} onClick={() => void recordPayment(sale)}>{busySale === sale.id ? "Salvando…" : "Registrar"}</Btn></div></td></tr>)}
+          {periodSales.length === 0 && <tr><td colSpan={5}>Nenhum contrato com saldo a receber neste período.</td></tr>}
+        </tbody></table></div>
+      </article>
+      <MoneyTable data={rec} onStatus={onStatus} onDueDate={onDueDate} />
     </>
   );
 }
-function Expenses({ money, add, onStatus }: { money: Money[]; add: () => void; onStatus: (item: Money, status: string) => void }) {
+function Expenses({ money, add, onStatus, onDueDate }: { money: Money[]; add: () => void; onStatus: (item: Money, status: string) => void; onDueDate: (item: Money, dueDate: string) => void }) {
   const data = money.filter((x) => x.kind === "despesa");
   return (
     <>
       <Head k="FINANCEIRO" title="Despesas" sub="Custos operacionais e de projetos.">
         <Btn onClick={add}><Plus size={16} /> Nova despesa</Btn>
       </Head>
-      <MoneyTable data={data} onStatus={onStatus} />
+      <MoneyTable data={data} onStatus={onStatus} onDueDate={onDueDate} />
     </>
   );
 }
-function MoneyTable({ data, onStatus }: { data: Money[]; onStatus: (item: Money, status: string) => void }) {
+function MoneyTable({ data, onStatus, onDueDate }: { data: Money[]; onStatus: (item: Money, status: string) => void; onDueDate: (item: Money, dueDate: string) => void }) {
   return (
     <article className="panel table">
       <div className="scroll">
         <table>
-          <thead><tr><th>DESCRIÇÃO</th><th>VÍNCULO</th><th>STATUS</th><th>VALOR</th></tr></thead>
+          <thead><tr><th>DESCRIÇÃO</th><th>CATEGORIA</th><th>VÍNCULO</th><th>RESPONSÁVEL</th><th>STATUS</th><th>VENCIMENTO / RECEBIMENTO</th><th>VALOR</th></tr></thead>
           <tbody>
             {data.map((x) => (
               <tr key={x.id}>
                 <td><strong>{x.name}</strong></td>
+                <td>{x.category || "—"}</td>
                 <td>{x.relation}</td>
-                <td><select aria-label={`Status de ${x.name}`} value={x.status} onChange={(e) => onStatus(x, e.target.value)}>{["Pendente", "Pago", "Atrasado", "Cancelado"].map((s) => <option key={s}>{s}</option>)}</select></td>
+                <td>{x.responsible || "—"}</td>
+                <td>{x.saleId ? <span>{x.category === "Contrato" ? "Contrato · saldo acima" : `${x.status} · histórico do contrato`}</span> : <select aria-label={`Status de ${x.name}`} value={x.status} onChange={(e) => onStatus(x, e.target.value)}>{["Pendente", "Pago", "Atrasado", "Cancelado"].map((s) => <option key={s}>{s}</option>)}</select>}</td>
+                <td><input type="date" aria-label={`Vencimento de ${x.name}`} value={x.dueDate ? new Date(x.dueDate).toISOString().slice(0, 10) : ""} onChange={(e) => onDueDate(x, e.target.value)} disabled={x.category === "Parcela recebida"} /><small>{x.paidAt ? `Recebido em ${new Date(x.paidAt).toLocaleDateString("pt-BR")}` : x.category === "Parcela recebida" ? "Pagamento confirmado" : ""}</small></td>
                 <td><strong>{x.kind === "despesa" ? "−" : ""}{brl(x.value)}</strong></td>
               </tr>
             ))}
@@ -842,6 +976,27 @@ function ActivityTimeline({ lead, close, notify }: { lead: Lead; close: () => vo
   useEffect(() => { void load(); }, [load]);
   const submit = async (e: FormEvent) => { e.preventDefault(); if (busy) return; setBusy(true); try { await api.createLeadActivity(lead.id, { type, content }); setContent(""); await load(); } catch (e) { notify(e instanceof Error ? e.message : "Falha ao registrar atividade"); } finally { setBusy(false); } };
   return <Modal title={`Histórico · ${lead.company}`} sub="Atividades registradas em ordem cronológica." close={close}><div className="quick"><form className="userform" onSubmit={submit}><label>Tipo<select value={type} onChange={(e) => setType(e.target.value)}><option value="OBSERVACAO">Observação</option><option value="LIGACAO">Ligação</option><option value="MENSAGEM_ENVIADA">Mensagem enviada</option><option value="MENSAGEM_RECEBIDA">Mensagem recebida</option><option value="REUNIAO">Reunião</option><option value="PROPOSTA">Proposta enviada/atualizada</option></select></label><label>Descrição<input value={content} onChange={(e) => setContent(e.target.value)} required /></label><Btn type="submit" disabled={busy}>{busy ? "Salvando…" : "Registrar"}</Btn></form><ol className="activity-timeline">{rows.map((r) => <li key={r.id}><strong>{r.type.replaceAll("_", " ")}</strong><p>{r.content}</p><small>{new Date(r.createdAt).toLocaleString("pt-BR")}</small></li>)}</ol></div></Modal>;
+}
+
+function ReverseSaleForm({ lead, close, save }: { lead: Lead; close: () => void; save: (reason: string, refundConfirmed: boolean) => Promise<boolean> }) {
+  const [reason, setReason] = useState("");
+  const [refundConfirmed, setRefundConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const submitLock = useRef(false);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (submitLock.current) return;
+    submitLock.current = true;
+    setSaving(true);
+    if (await save(reason, refundConfirmed)) close();
+    else { submitLock.current = false; setSaving(false); }
+  };
+  return <Modal title={`Reverter venda · ${lead.company}`} sub="A venda sairá dos indicadores; o histórico comercial e financeiro será mantido." close={close}><form className="modalform" onSubmit={submit}>
+    <label>Motivo da reversão<textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={5} maxLength={1000} required /></label>
+    <label className="checkline"><input type="checkbox" checked={refundConfirmed} onChange={(event) => setRefundConfirmed(event.target.checked)} />Se houve valores recebidos, confirmo que o reembolso integral já foi efetivamente pago.</label>
+    <p className="note">Se houver recebimentos ainda sem reembolso registrado, o sistema bloqueará a reversão. Pagamentos e reembolsos ficam preservados no financeiro.</p>
+    <footer><Btn plain onClick={close}>Cancelar</Btn><Btn type="submit" disabled={saving}>{saving ? "Revertendo…" : "Confirmar reversão"}</Btn></footer>
+  </form></Modal>;
 }
 
 function Modal({ title, sub, close, children }: { title: string; sub: string; close: () => void; children: React.ReactNode }) {
@@ -896,7 +1051,7 @@ function LeadForm({ lead, close, save }: { lead: Lead | null; close: () => void;
         </label>
         <label>Status
           <select name="status" defaultValue={lead?.status || "Novo"}>
-            {stages.map((x) => <option key={x}>{x}</option>)}
+            {(lead?.saleId ? lead.saleReversedAt ? stages.filter((x) => x !== "Ganho") : stages.filter((x) => x === "Ganho") : stages).map((x) => <option key={x}>{x}</option>)}
           </select>
         </label>
         <footer>
@@ -907,17 +1062,20 @@ function LeadForm({ lead, close, save }: { lead: Lead | null; close: () => void;
     </Modal>
   );
 }
-function QuickForm({ type, close, save }: { type: "task" | "expense"; close: () => void; save: (a: string, b: string) => Promise<boolean> }) {
+function QuickForm({ type, close, save }: { type: "task" | "expense"; close: () => void; save: (a: string, b: string, dueDate?: string, idempotencyKey?: string, category?: string) => Promise<boolean> }) {
   const [a, setA] = useState("");
   const [b, setB] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [category, setCategory] = useState("Operacional");
   const [saving, setSaving] = useState(false);
   const submitLock = useRef(false);
+  const requestKey = useRef(crypto.randomUUID());
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (submitLock.current) return;
     submitLock.current = true;
     setSaving(true);
-    const saved = await save(a, b);
+    const saved = await save(a, b, dueDate, requestKey.current, category);
     if (saved) close();
     else { submitLock.current = false; setSaving(false); }
   };
@@ -926,6 +1084,8 @@ function QuickForm({ type, close, save }: { type: "task" | "expense"; close: () 
       <form className="modalform" onSubmit={submit}>
         <label>{type === "task" ? "Título" : "Descrição"}<input value={a} onChange={(e) => setA(e.target.value)} required /></label>
         <label>{type === "task" ? "Vínculo" : "Valor (R$)"}<input value={b} onChange={(e) => setB(e.target.value)} required /></label>
+        {type === "expense" && <label>Vencimento<input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} /></label>}
+        {type === "expense" && <label>Categoria<select value={category} onChange={(e) => setCategory(e.target.value)}>{["Operacional", "Fornecedor", "Marketing", "Folha", "Impostos", "Serviços", "Outros"].map((item) => <option key={item}>{item}</option>)}</select></label>}
         <footer>
           <Btn plain onClick={close}>Cancelar</Btn>
           <Btn type="submit" disabled={saving}>{saving ? "Salvando…" : type === "task" ? "Criar tarefa" : "Registrar despesa"}</Btn>
@@ -933,6 +1093,27 @@ function QuickForm({ type, close, save }: { type: "task" | "expense"; close: () 
       </form>
     </Modal>
   );
+}
+function ProjectForm({ clients, close, save }: { clients: Client[]; close: () => void; save: (data: { name: string; clientId: string; value: number; deadline?: string }) => Promise<boolean> }) {
+  const [saving, setSaving] = useState(false);
+  const submitLock = useRef(false);
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (submitLock.current || clients.length === 0) return;
+    submitLock.current = true;
+    setSaving(true);
+    const data = new FormData(e.currentTarget);
+    const saved = await save({ name: String(data.get("name")), clientId: String(data.get("clientId")), value: Number(data.get("value")), deadline: String(data.get("deadline") || "") || undefined });
+    if (saved) close(); else { submitLock.current = false; setSaving(false); }
+  };
+  return <Modal title="Novo projeto" sub="Vincule um projeto ao cliente convertido ou já cadastrado." close={close}><form className="modalform" onSubmit={submit}>
+    <label>Nome do projeto<input name="name" required /></label>
+    <label>Cliente<select name="clientId" required defaultValue="">{clients.map((client) => <option key={client.id} value={client.id}>{client.company}</option>)}</select></label>
+    <label>Valor contratado (R$)<input name="value" type="number" min="0" step="0.01" defaultValue="0" required /></label>
+    <label>Prazo de entrega<input name="deadline" type="date" /></label>
+    {clients.length === 0 && <p className="note">Cadastre ou converta um lead em cliente antes de criar um projeto.</p>}
+    <footer><Btn plain onClick={close}>Cancelar</Btn><Btn type="submit" disabled={saving || clients.length === 0}>{saving ? "Salvando…" : "Criar projeto"}</Btn></footer>
+  </form></Modal>;
 }
 function SettingsPage({ notify, user, logout }: { notify: (s: string) => void; user: AuthUser; logout: () => void }) {
   const adminTabs = ["Dados da empresa", "Usuários e permissões", "Status do pipeline", "Categorias financeiras", "Pacotes de serviços", "Notificações"] as const;

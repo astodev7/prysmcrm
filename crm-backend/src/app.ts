@@ -34,10 +34,16 @@ export async function buildApp() {
     if (!request.user?.sub || !["POST", "PUT", "PATCH", "DELETE"].includes(request.method) || reply.statusCode >= 400) return;
     const parts = request.url.split("?")[0].split("/").filter(Boolean);
     const entity = parts[0] ?? "unknown";
-    const entityId = parts[1] && parts[1] !== "summary" && parts[1] !== "pipeline" ? parts[1] : null;
+    if (entity === "auth") return;
+    if (entity === "finance" && parts[1] === "sales" && parts[3] === "payments" && reply.statusCode === 200) return;
+    if (entity === "finance" && parts.length === 1 && request.method === "POST" && reply.statusCode === 200) return;
+    const entityId = entity === "finance" && parts[1] === "sales" ? parts[2] ?? null : parts[1] && parts[1] !== "summary" && parts[1] !== "pipeline" ? parts[1] : null;
+    const fields = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+      ? Object.keys(request.body).filter((field) => !["password", "secret", "token", "otp", "idempotencyKey"].includes(field.toLowerCase()))
+      : [];
     try {
       await import("./config/prisma.js").then(({ prisma }) => prisma.auditLog.create({
-        data: { actorId: request.user.sub, action: request.method, entity, entityId },
+        data: { actorId: request.user.sub, action: request.method, entity, entityId, ...(fields.length ? { details: { fields } } : {}) },
       }));
     } catch (error) {
       app.log.error({ error, url: request.url }, "Falha ao registrar auditoria");

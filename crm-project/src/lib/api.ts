@@ -101,6 +101,7 @@ export type ApiLead = {
   notes: string | null;
   ownerId: string | null;
   owner?: { id: string; name: string } | null;
+  sale?: { id: string; soldAt: string; contractAmount: number | string; reversedAt: string | null } | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -159,10 +160,14 @@ export type ApiFinance = {
   category: string | null;
   notes: string | null;
   createdAt: string;
+  responsibleId?: string | null;
+  responsible?: { id: string; name: string } | null;
 };
 
 export type ApiFollowUp = { id: string; leadId: string; description: string; dueAt: string; status: "PENDENTE" | "CONCLUIDO" | "CANCELADO"; lead: { id: string; company: string; contact: string } };
 export type ApiProposal = { id: string; leadId: string; title: string; packageName: string | null; description: string; items: { name: string; quantity: number; unitPrice: number }[]; discount: number; total: number; terms: string | null; deadline: string | null; status: string; version: number; lead?: { company: string } };
+export type ApiFinanceSummary = { totalReceitas: number; totalDespesas: number; lucroRealizado: number; vendasFechadas: number; quantidadeVendas: number; valoresAReceber: number; recebiveisPendentes: number; recebiveisAtrasados: number; despesasPendentes: number; lucroProjetado: number; pendentes: { value: number } };
+export type ApiOpenSale = { id: string; company: string; soldAt: string; contractAmount: number; received: number; outstanding: number; dueDate: string | null; overdue: boolean };
 
 export type ApiCompany = {
   id: string;
@@ -213,6 +218,7 @@ export const api = {
     request<ApiLead>("/leads", { method: "POST", body: data }),
   updateLead: (id: string, data: Record<string, unknown>) =>
     request<ApiLead>(`/leads/${id}`, { method: "PUT", body: data }),
+  reverseSale: (id: string, data: { reason: string; refundConfirmed: boolean; idempotencyKey: string }) => request<{ saleId: string; restoredStatus: string; refundRecorded: number }>(`/leads/${id}/reverse-sale`, { method: "POST", body: data }),
   deleteLead: (id: string) => request<void>(`/leads/${id}`, { method: "DELETE" }),
   pipelineSummary: () =>
     request<{ status: string; count: number; totalValue: number }[]>("/leads/pipeline/summary"),
@@ -263,19 +269,9 @@ export const api = {
     const qs = q.toString();
     return request<ApiFinance[]>(`/finance${qs ? `?${qs}` : ""}`);
   },
-  financeSummary: () =>
-    request<{
-      totalReceitas: number;
-      totalDespesas: number;
-      lucroRealizado: number;
-      vendasFechadas: number;
-      quantidadeVendas: number;
-      valoresAReceber: number;
-      despesasPendentes: number;
-      lucroProjetado: number;
-      pendentes: { value: number };
-    }>("/finance/summary"),
-  recordSalePayment: (saleId: string, amount: number, paidAt?: string) => request<ApiFinance>(`/finance/sales/${saleId}/payments`, { method: "POST", body: { amount, paidAt } }),
+  financeSummary: (range?: { from?: string; to?: string }) => { const q = new URLSearchParams(); if (range?.from) q.set("from", range.from); if (range?.to) q.set("to", range.to); const qs = q.toString(); return request<ApiFinanceSummary>(`/finance/summary${qs ? `?${qs}` : ""}`); },
+  getOpenSales: (range?: { from?: string; to?: string }) => { const q = new URLSearchParams(); if (range?.from) q.set("from", range.from); if (range?.to) q.set("to", range.to); const qs = q.toString(); return request<ApiOpenSale[]>(`/finance/sales/open${qs ? `?${qs}` : ""}`); },
+  recordSalePayment: (saleId: string, amount: number, idempotencyKey: string, paidAt?: string) => request<ApiFinance>(`/finance/sales/${saleId}/payments`, { method: "POST", body: { amount, idempotencyKey, paidAt } }),
   createFinance: (data: Record<string, unknown>) =>
     request<ApiFinance>("/finance", { method: "POST", body: data }),
   updateFinance: (id: string, data: Record<string, unknown>) =>

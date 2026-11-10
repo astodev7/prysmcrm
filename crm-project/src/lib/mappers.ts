@@ -23,6 +23,10 @@ export type Lead = {
   owner: string;
   ownerId?: string;
   value: number;
+  contractAmount?: number;
+  soldAt?: string;
+  saleId?: string;
+  saleReversedAt?: string | null;
   probability: number;
   next: string;
   date: string;
@@ -66,6 +70,9 @@ export type Money = {
   createdAt: string;
   dueDate?: string | null;
   paidAt?: string | null;
+  saleId?: string | null;
+  category?: string | null;
+  responsible?: string;
 };
 
 // Status maps
@@ -174,6 +181,10 @@ export function mapLead(l: ApiLead): Lead {
     owner: l.owner?.name || "—",
     ownerId: l.ownerId || undefined,
     value: Number(l.value),
+    contractAmount: l.sale ? Number(l.sale.contractAmount) : undefined,
+    soldAt: l.sale?.soldAt,
+    saleId: l.sale?.id,
+    saleReversedAt: l.sale?.reversedAt,
     probability: l.probability,
     next: l.nextAction || "",
     date: l.nextContact ? new Date(l.nextContact).toISOString().slice(0, 10) : "",
@@ -252,6 +263,9 @@ export function mapFinance(f: ApiFinance): Money {
     createdAt: f.createdAt,
     dueDate: f.dueDate,
     paidAt: f.paidAt,
+    saleId: f.saleId,
+    category: f.category,
+    responsible: f.responsible?.name,
   };
 }
 

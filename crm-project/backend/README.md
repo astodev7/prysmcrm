@@ -25,6 +25,8 @@ API REST completa para o CRM (Leads, Pipeline, Clientes, Projetos, Tarefas, Fina
 5. Inicie a API com `npm run dev`.
 
 O seed de demonstração só roda em banco sem usuários e exige `SEED_PASSWORD` forte; ele não apaga tabelas existentes.
+
+As migrações `20261109170000_payment_idempotency` e `20261109180000_sale_lifecycle_audit` adicionam proteção contra recebimentos repetidos, estado de reversão das vendas, campos de auditoria e responsável financeiro. A implantação Railway aplica as migrações pelo `startCommand`; em ambiente local, execute `npx prisma migrate deploy` antes de iniciar o backend.
 API disponível em: `http://localhost:3333`
 
 ## Variáveis de ambiente
@@ -66,7 +68,8 @@ O seed é opcional, só funciona em banco sem usuários e exige `SEED_PASSWORD` 
 | GET | `/leads/pipeline/summary` | Resumo do pipeline |
 | GET | `/leads/:id` | Detalhe |
 | POST | `/leads` | Criar |
-| PUT | `/leads/:id` | Atualizar (status `GANHO` cria Cliente automático) |
+| PUT | `/leads/:id` | Atualizar (status `GANHO` fecha uma venda, converte o cliente e cria o recebível pendente) |
+| POST | `/leads/:id/reverse-sale` | Reverter venda (ADMIN; exige motivo e confirmação de reembolso se já houve recebimento) |
 | DELETE | `/leads/:id` | Remover |
 
 ### Clients
@@ -101,6 +104,8 @@ O seed é opcional, só funciona em banco sem usuários e exige `SEED_PASSWORD` 
 |--------|------|-----------|
 | GET | `/finance` | Listar lançamentos |
 | GET | `/finance/summary` | Resumo (receitas, despesas, saldo) |
+| GET | `/finance/sales/open` | Contratos e saldos em aberto |
+| POST | `/finance/sales/:id/payments` | Registrar pagamento parcial ou total (requer `amount` e `idempotencyKey` UUID; `paidAt` opcional) |
 | GET | `/finance/:id` | Detalhe |
 | POST | `/finance` | Criar |
 | PUT | `/finance/:id` | Atualizar |

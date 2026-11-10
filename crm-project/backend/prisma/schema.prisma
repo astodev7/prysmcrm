@@ -79,6 +79,7 @@ model User {
   leads     Lead[]    @relation("LeadOwner")
   tasks     Task[]    @relation("TaskAssignee")
   createdLeads Lead[] @relation("LeadCreator")
+  financeEntries Finance[] @relation("FinanceResponsible")
 
   @@map("users")
 }
@@ -142,6 +143,7 @@ model Client {
   lead      Lead?    @relation(fields: [leadId], references: [id])
 
   projects  Project[]
+  sales     ClosedSale[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -201,6 +203,9 @@ model Finance {
   notes     String?
   saleId    String?
   sale      ClosedSale? @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  idempotencyKey String? @unique
+  responsibleId String?
+  responsible User? @relation("FinanceResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -213,13 +218,19 @@ model ClosedSale {
   leadId          String   @unique
   lead            Lead     @relation(fields: [leadId], references: [id], onDelete: Restrict)
   clientId        String?
+  client          Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
   contractAmount  Decimal  @db.Decimal(12, 2)
+  previousStatus  LeadStatus?
   soldAt          DateTime @default(now())
+  reversedAt      DateTime?
+  reversalReason  String?
+  reversedBy      String?
   payments        Finance[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@index([soldAt])
+  @@index([reversedAt])
   @@map("closed_sales")
 }
 
@@ -290,6 +301,7 @@ model AuditLog {
   action    String
   entity    String
   entityId  String?
+  details   Json?
   createdAt DateTime @default(now())
 
   @@index([actorId, createdAt])
